@@ -96,7 +96,22 @@ export default class PermissionProbe extends Component {
    * bug. Same trap as sidePanel.open().
    */
   grant = (): void => {
-    if (!this.origin) return;
+    // Silently returning here is what made "Grant this origin" look broken on
+    // Chrome: with no host access, tabs.query cannot report a URL, so there
+    // was no origin to request and the button did nothing at all. The
+    // chicken-and-egg is worth stating rather than swallowing — you cannot
+    // ask for permission to a page you are not allowed to identify.
+    if (!this.origin) {
+      const at = new Date().toLocaleTimeString();
+      this.append({
+        ok: false,
+        at,
+        url: '(unknown)',
+        error:
+          'Cannot request access: this tab\'s URL is not visible, which means there is no host access at all. Reopen the panel from the extension icon.',
+      });
+      return;
+    }
     void chrome.permissions
       .request({ origins: [this.origin] })
       .then(() => this.refresh());

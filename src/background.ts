@@ -19,16 +19,33 @@ declare const __TARGET__: 'chrome' | 'firefox';
 // substituted with a literal, Rollup drops the whole dead branch and the
 // warning goes with it.
 if (__TARGET__ === 'chrome') {
-  // One line, no click handler: Chrome wires the action button to the panel
-  // itself. It only works because the manifest declares no default_popup —
-  // a popup would win and this would silently do nothing.
-  chrome.runtime.onInstalled.addListener(() => {
-    void chrome.sidePanel
-      ?.setPanelBehavior({ openPanelOnActionClick: true })
-      .catch(() => {
-        // Chrome older than 114. The icon will do nothing; acceptable, since
-        // the manifest's minimum is well above that.
-      });
+  // DO NOT go back to setPanelBehavior({openPanelOnActionClick: true}).
+  //
+  // It looks like the tidier option — one line, no click handler, Chrome
+  // wires the button to the panel for you — and it silently costs the
+  // extension all page access.
+  //
+  // `activeTab` is granted when the user INVOKES THE EXTENSION'S ACTION. With
+  // openPanelOnActionClick, Chrome consumes the click itself to open a panel;
+  // `action.onClicked` never fires, the action is never invoked as far as
+  // Chrome is concerned, and no grant is issued. Measured 2026-08-22: every
+  // executeScript failed with "Cannot access contents of the page", and
+  // tabs.query could not even return a URL — `tab.url` came back undefined,
+  // because without host access Chrome will not tell you where a tab is.
+  //
+  // Firefox was green on the identical build for exactly this reason: its
+  // path goes through our own onClicked handler below, so the action really
+  // is invoked.
+  //
+  // So Chrome handles the click too. `onClicked` hands us the tab, so there
+  // is no async lookup before `open()` and the user gesture is still live —
+  // awaiting a tabs.query first would spend it and Chrome would reject the
+  // call.
+  chrome.action.onClicked.addListener((tab) => {
+    if (tab.id === undefined) return;
+    void chrome.sidePanel?.open({ tabId: tab.id }).catch(() => {
+      /* Chrome older than 114 */
+    });
   });
 } else {
   // Firefox has no equivalent switch, so we handle the click ourselves.
