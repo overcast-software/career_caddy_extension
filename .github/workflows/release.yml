@@ -27,7 +27,7 @@ jobs:
       - run: npm ci
 
       # The tag must match the version the manifest will actually carry, or
-      # you ship v3.1.0 containing 3.0.0 and the store rejects a version it
+      # you ship v2.1.0 containing 2.0.0 and the store rejects a version it
       # has already seen. manifest.mjs reads package.json, so checking
       # package.json checks the manifest.
       - name: Assert tag matches package.json version

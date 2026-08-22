@@ -1,4 +1,4 @@
-# career-caddy-sender (3.x) — Glimmer rewrite
+# career-caddy-sender (2.x) — Glimmer rewrite
 
 The Career Caddy browser extension, rewritten so its entire UI is **Glimmer
 components** — no Ember `Application`, no router, no resolver, no dependency
@@ -7,10 +7,19 @@ injection. Chrome/Edge + Firefox, MV3.
 Design and rationale: [`GLIMMER-REWRITE.md`](./GLIMMER-REWRITE.md).
 
 This is a submodule of [career_caddy](https://github.com/overcast-software/career_caddy),
-mounted at `extension/`. The shipping **2.x** extension still lives in the
-`frontend` submodule at `frontend/public/extensions/career-caddy-sender/` and
-is untouched by this repo — it remains what users have installed until 3.x
-replaces it.
+mounted at `extension/`. The **legacy** extension — vanilla JS, popup-based —
+still lives in the `frontend` submodule at
+`frontend/public/extensions/career-caddy-sender/` and is untouched by this repo.
+
+> **A note on version numbers, because they collide.** The legacy extension
+> published **1.1.0** (Chrome) and **1.1.1** (Firefox) in May 2026 and nothing
+> since; its local build markers nonetheless ran up to *2.3.0*, none of which
+> ever left a laptop. This rewrite starts at **2.0.0** — a major bump over what
+> was actually published, chosen to mark the rewrite rather than to clear those
+> throwaway markers. So a number here can be *lower* than a legacy number and
+> still be newer. The two lines live in different repos with different
+> extension IDs, so nothing resolves them against each other; only the stores'
+> view matters, and the stores have only ever seen 1.1.x.
 
 ## Build
 

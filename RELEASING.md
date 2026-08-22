@@ -23,15 +23,22 @@ git push && git push --tags
 
 `manifest.mjs` derives its version from `package.json`, so there is one number,
 not two. `release.yml` asserts the tag matches it and fails loudly if not —
-shipping `v3.1.0` containing `3.0.0` gets rejected by the store as a version it
+shipping `v2.1.0` containing `2.0.0` gets rejected by the store as a version it
 has already seen, which is a confusing error to receive an hour later.
 
 Then run **Publish** from the Actions tab, ticking the stores you want.
 
 ## Version policy
 
-Published today: **Chrome 1.1.0, Firefox 1.1.1** (May 2026). Everything from
-1.2.0 through 2.3.0 was a local test marker that never left a laptop.
+Published today: **Chrome 1.1.0, Firefox 1.1.1** (May 2026), from the legacy
+codebase. Everything it tagged from 1.2.0 through 2.3.0 was a local test marker
+that never left a laptop.
+
+This rewrite starts at **2.0.0** — a major bump over what was actually
+published. It is deliberately *not* 3.0.0: the only thing 3.x would have been
+clearing is those unpublished markers. A consequence to be aware of when
+reading old commits: a version here can be numerically lower than a legacy one
+and still be newer.
 
 **There is no installed user base.** That removes the constraint that usually
 dominates extension release planning, and it is worth being explicit about
@@ -40,8 +47,8 @@ what it does and does not change:
 - **Gone:** any concern about disrupting existing installs. Permission changes
   do not cost you a re-consent wave, because there is nobody to re-consent.
   Do not sequence work around avoiding one.
-- **Gone:** pressure to preserve behaviour for compatibility. 3.x can break
-  anything 2.x did.
+- **Gone:** pressure to preserve behaviour for compatibility. This rewrite can
+  break anything the legacy extension did.
 - **Still applies:** the stores enforce **monotonically increasing versions**,
   and a version number is burned once submitted — even by a rejected
   submission. That is a store rule about their own records, not about users,
@@ -91,8 +98,8 @@ but a reviewer will stop on them, so have the answer ready:**
 
 `strict_min_version` is **140.0**, because `data_collection_permissions` needs
 Firefox 140 (142 on Android). Lowering it re-introduces a real bug: users below
-140 would get no data-collection disclosure. The 2.x manifest still has that
-mismatch.
+140 would get no data-collection disclosure. The legacy manifest still has that
+mismatch, unfixed.
 
 Signing is asynchronous and listed submissions are **never** auto-approved.
 `--approval-timeout 0` makes the job return once submitted; watch the dashboard
@@ -101,11 +108,11 @@ for the verdict.
 ### Chrome Web Store
 
 More relaxed about bundles, but the risk is that a large opaque bundle draws a
-slower **manual** review. `cws-justifications.txt` (currently in the 2.x
+slower **manual** review. `cws-justifications.txt` (currently in the legacy
 `store-assets/`) must be true of the shipped code — it is the document a
 reviewer checks permissions against.
 
-Permission justifications, current as of 3.0.0:
+Permission justifications, current as of 2.0.0:
 
 | Permission | Why |
 |---|---|
