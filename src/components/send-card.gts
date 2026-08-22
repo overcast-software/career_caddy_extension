@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { request, FRONTEND_ORIGIN } from '../lib/api.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
+import { access } from '../state/access.ts';
 
 /**
  * "Send this page" — the extension's most-used action.
@@ -63,9 +64,15 @@ export default class SendCard extends Component {
 
     const payload = await page.capture();
     if (!payload) {
-      // Distinguish a permission boundary from an empty page. Saying "nothing
-      // found" when the truth is "I am not allowed to look" sends people to
-      // debug the wrong thing.
+      // THREE different causes, three different fixes. Collapsing them into
+      // one message is how someone ends up debugging cross-origin iframes
+      // when the actual answer is a permission they never granted.
+      await access.refresh();
+      if (access.needsGrant) {
+        this.kind = 'error';
+        this.status = `Enable Career Caddy on ${access.host} first — the button is just above.`;
+        return;
+      }
       const blocked = await page.countBlockedFrames();
       this.kind = 'error';
       this.status = blocked

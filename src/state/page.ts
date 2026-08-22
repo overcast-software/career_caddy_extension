@@ -29,6 +29,19 @@ class PageState {
   /** Monotonic; a response whose ticket is stale is dropped, not rendered. */
   private ticket = 0;
   private started = false;
+  private subscribers: (() => void)[] = [];
+
+  /**
+   * Notify on every settled page change.
+   *
+   * A callback list rather than `page` importing what it needs to update:
+   * `access` already imports `page`, so the reverse would be a cycle. This
+   * keeps the dependency pointing one way and leaves the wiring visible at
+   * the call site instead of buried in a module's import list.
+   */
+  onChange(fn: () => void): void {
+    this.subscribers.push(fn);
+  }
 
   get host(): string {
     try {
@@ -74,6 +87,13 @@ class PageState {
       this.isCareerCaddy = SELF_HOSTS.has(new URL(this.url).hostname.toLowerCase());
     } catch {
       this.isCareerCaddy = false;
+    }
+    for (const fn of this.subscribers) {
+      try {
+        fn();
+      } catch {
+        /* a bad subscriber must not stop the others */
+      }
     }
   }
 

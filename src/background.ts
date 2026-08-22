@@ -43,6 +43,24 @@ if (__TARGET__ === 'chrome') {
   // call.
   chrome.action.onClicked.addListener((tab) => {
     if (tab.id === undefined) return;
+    // THE ONE MOMENT WE CAN SEE WHERE THE USER IS.
+    //
+    // Chrome will not report `tab.url` without host access — so on a site we
+    // have not been granted, the panel cannot even name the page it is
+    // sitting next to, and therefore cannot ask for permission to it. That
+    // chicken-and-egg is what would otherwise force a second prompt (request
+    // `tabs` just to learn the URL, then request the origin).
+    //
+    // But `onClicked` IS one of the four activeTab-granting gestures, and
+    // that grant covers reading the Tab object. So at this instant — and
+    // only this instant — the worker knows the URL. Stash it; the panel picks
+    // it up and can offer a precisely-targeted "enable on this site".
+    //
+    // session storage, not local: this is about the current browsing session
+    // and must not outlive the browser.
+    void chrome.storage.session
+      .set({ ccLastActionTab: { tabId: tab.id, url: tab.url ?? '', at: Date.now() } })
+      .catch(() => {});
     void chrome.sidePanel?.open({ tabId: tab.id }).catch(() => {
       /* Chrome older than 114 */
     });
