@@ -15,6 +15,13 @@ import { access } from '../state/access.ts';
  * title/company/description client-side and skip the server's browser tier —
  * that is a later phase, and its absence costs latency, not correctness.
  */
+/**
+ * Below this, a "successful" capture is almost certainly page chrome rather
+ * than a job posting. Deliberately generous — a terse posting is possible,
+ * and a false warning is cheaper than a silent bad send.
+ */
+const MIN_USEFUL_CHARS = 400;
+
 export default class SendCard extends Component {
   @tracked status = '';
   @tracked kind: 'idle' | 'busy' | 'ok' | 'error' = 'idle';
@@ -87,6 +94,24 @@ export default class SendCard extends Component {
       return;
     }
 
+    // A capture that is technically non-empty but far too small is the
+    // failure that actually happens, and it does not announce itself: the
+    // page looks fine on screen, the send succeeds, and the server reports
+    // "Extraction failed" minutes later. Measured on a Greenhouse posting
+    // whose top frame yielded only the email-signup footer. Say the size out
+    // loud so a bad capture is obvious BEFORE it is sent.
+    const chars = payload.text.trim().length;
+    if (chars < MIN_USEFUL_CHARS) {
+      const blocked = await page.countBlockedFrames();
+      this.kind = 'error';
+      this.status =
+        `Only ${chars} characters readable here` +
+        (blocked
+          ? `, and ${blocked} frame(s) are cross-origin — the posting is probably inside one the extension can't reach.`
+          : ` — that's too little to be the job posting. Try the posting's own page rather than a listing or search result.`);
+      return;
+    }
+
     this.status = 'Sending to Career Caddy…';
     // from-text is one of the api's deliberately RPC-shaped endpoints: plain
     // JSON, not JSON:API. `plainJson` is how that is stated rather than
@@ -114,9 +139,10 @@ export default class SendCard extends Component {
 
     this.scrapeId = String(resp.data?.data?.id ?? resp.data?.id ?? '') || null;
     this.kind = 'ok';
-    this.status = this.autoScore
-      ? 'Sent. Career Caddy is parsing and scoring it.'
-      : 'Sent. Career Caddy is parsing it.';
+    const from = payload.frames > 1 ? ` from ${payload.frames} frames` : '';
+    this.status =
+      `Sent ${chars.toLocaleString()} characters${from}. ` +
+      (this.autoScore ? 'Parsing and scoring it.' : 'Parsing it.');
   }
 
   <template>

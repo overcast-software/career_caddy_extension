@@ -3,6 +3,12 @@ import { ccGrabPayload, ccCountUnreachableFrames } from '../injected/grab-payloa
 import type { PagePayload } from '../injected/grab-payload.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
 
+/** What capture() returns: the merged page plus how it was assembled. */
+export interface CapturedPage extends PagePayload {
+  /** Frames that contributed text. 1 means the top frame only. */
+  frames: number;
+}
+
 /**
  * Which page the panel is looking at.
  *
@@ -100,16 +106,46 @@ class PageState {
   /**
    * Read the active tab's text. Returns null when the page cannot be read —
    * which is a permission outcome, not an error, so the caller can say so.
+   *
+   * `allFrames: true` IS THE WHOLE FEATURE, not a refinement.
+   *
+   * ATS listings routinely put the actual job body in a same-origin subframe
+   * — greenhouse boards, worksourcewa's GetJob.aspx, Lever overlays. Reading
+   * only the top frame returns whatever chrome the outer document happens to
+   * carry. Measured 2026-08-22 on a real Greenhouse posting: the top frame
+   * yielded "Get new jobs like this in your inbox / We'll email you when Block
+   * posts a job like this one…" — the signup footer — and the server
+   * (correctly) reported "Extraction failed". The page looked fine on screen
+   * and the capture was junk, which is the worst combination.
+   *
+   * results[0] is the top frame and ITS url is the canonical link; subframe
+   * text is appended after a visible separator so the parse agent gets a
+   * structural hint rather than one undifferentiated blob.
+   *
+   * Cross-origin subframes are still invisible — that is a permission
+   * boundary, and countBlockedFrames() exists to say so rather than let it
+   * read as an empty page.
    */
-  async capture(): Promise<PagePayload | null> {
+  async capture(): Promise<CapturedPage | null> {
     await this.refresh();
     if (this.tabId === undefined) return null;
     try {
-      const [hit] = await chrome.scripting.executeScript({
-        target: { tabId: this.tabId },
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId, allFrames: true },
         func: ccGrabPayload,
       });
-      return (hit?.result as PagePayload) ?? null;
+      if (!results?.length) return null;
+      const top = results[0]?.result as PagePayload | undefined;
+      if (!top) return null;
+      const parts = results
+        .map((r) => (r.result as PagePayload | undefined)?.text)
+        .filter((t): t is string => !!t && !!t.trim());
+      return {
+        url: top.url,
+        title: top.title,
+        text: parts.join('\n\n--- frame ---\n\n'),
+        frames: parts.length,
+      };
     } catch {
       return null;
     }
