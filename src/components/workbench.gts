@@ -56,6 +56,7 @@ export default class Workbench extends Component {
     // Re-evaluate access on every page change — a grant is per-origin, so
     // switching tabs can move between granted and ungranted sites.
     page.onChange(() => void access.refresh());
+    access.listen();
     void access.refresh();
   }
 

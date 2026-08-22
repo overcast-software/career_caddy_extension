@@ -19,48 +19,27 @@ declare const __TARGET__: 'chrome' | 'firefox';
 // substituted with a literal, Rollup drops the whole dead branch and the
 // warning goes with it.
 if (__TARGET__ === 'chrome') {
-  // DO NOT go back to setPanelBehavior({openPanelOnActionClick: true}).
+  // Chrome handles the click here rather than via
+  // setPanelBehavior({openPanelOnActionClick: true}), so that both targets
+  // share one shape and `onClicked` is ours to extend.
   //
-  // It looks like the tidier option — one line, no click handler, Chrome
-  // wires the button to the panel for you — and it silently costs the
-  // extension all page access.
+  // BE CLEAR ABOUT WHAT THIS DOES NOT BUY. Handling the click does NOT give
+  // the panel page access. Measured 2026-08-22 on a live Greenhouse posting:
+  // `activeTab` was held, and `executeScript` still failed with "Cannot
+  // access contents of url …". Chrome deliberately never extends activeTab
+  // to a side panel — crbug.com/1453437, the reasoning being that a
+  // persistently-shown panel makes it "not as evident to the user that they
+  // invoke the extension". That is by design, not a defect to wait out.
   //
-  // `activeTab` is granted when the user INVOKES THE EXTENSION'S ACTION. With
-  // openPanelOnActionClick, Chrome consumes the click itself to open a panel;
-  // `action.onClicked` never fires, the action is never invoked as far as
-  // Chrome is concerned, and no grant is issued. Measured 2026-08-22: every
-  // executeScript failed with "Cannot access contents of the page", and
-  // tabs.query could not even return a URL — `tab.url` came back undefined,
-  // because without host access Chrome will not tell you where a tab is.
+  // Page access therefore comes from a real granted host permission; see
+  // state/access.ts. Firefox needs none of it, which is why the gate is
+  // capability-detected rather than branched on target.
   //
-  // Firefox was green on the identical build for exactly this reason: its
-  // path goes through our own onClicked handler below, so the action really
-  // is invoked.
-  //
-  // So Chrome handles the click too. `onClicked` hands us the tab, so there
-  // is no async lookup before `open()` and the user gesture is still live —
-  // awaiting a tabs.query first would spend it and Chrome would reject the
-  // call.
+  // `onClicked` hands us the tab, so there is no async lookup before
+  // `open()` and the user gesture is still live — awaiting a tabs.query
+  // first would spend it and Chrome would reject the call.
   chrome.action.onClicked.addListener((tab) => {
     if (tab.id === undefined) return;
-    // THE ONE MOMENT WE CAN SEE WHERE THE USER IS.
-    //
-    // Chrome will not report `tab.url` without host access — so on a site we
-    // have not been granted, the panel cannot even name the page it is
-    // sitting next to, and therefore cannot ask for permission to it. That
-    // chicken-and-egg is what would otherwise force a second prompt (request
-    // `tabs` just to learn the URL, then request the origin).
-    //
-    // But `onClicked` IS one of the four activeTab-granting gestures, and
-    // that grant covers reading the Tab object. So at this instant — and
-    // only this instant — the worker knows the URL. Stash it; the panel picks
-    // it up and can offer a precisely-targeted "enable on this site".
-    //
-    // session storage, not local: this is about the current browsing session
-    // and must not outlive the browser.
-    void chrome.storage.session
-      .set({ ccLastActionTab: { tabId: tab.id, url: tab.url ?? '', at: Date.now() } })
-      .catch(() => {});
     void chrome.sidePanel?.open({ tabId: tab.id }).catch(() => {
       /* Chrome older than 114 */
     });

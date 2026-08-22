@@ -26,6 +26,36 @@ export type AccessState =
   | 'ungrantable';
 
 class AccessTracker {
+  private listening = false;
+
+  /**
+   * React to permission changes wherever they come from.
+   *
+   * Not just our own buttons: the user can revoke from chrome://extensions at
+   * any moment and nothing would tell us. `onAdded`/`onRemoved` make the panel
+   * correct by construction instead of correct-until-something-changes, and
+   * they remove the setTimeout-then-hope pattern that a manual re-read was
+   * papering over.
+   */
+  listen(): void {
+    if (this.listening) return;
+    this.listening = true;
+    try {
+      chrome.permissions.onAdded.addListener(() => void this.afterChange());
+      chrome.permissions.onRemoved.addListener(() => void this.afterChange());
+    } catch {
+      /* not in an extension context */
+    }
+  }
+
+  private async afterChange(): Promise<void> {
+    // A new grant means Chrome will now report this tab's URL, so re-read the
+    // page BEFORE recomputing access — otherwise the first render after a
+    // grant still shows the pre-grant state.
+    await page.refresh();
+    await this.refresh();
+  }
+
   @tracked state: AccessState = 'unknown';
   /** The `https://host/*` pattern for the current page, or null. */
   @tracked pattern: string | null = null;
@@ -47,15 +77,13 @@ class AccessTracker {
   /**
    * Work out where we are and whether we may read it.
    *
-   * `page.url` may be empty on Chrome precisely BECAUSE we lack access — the
-   * browser will not name a tab you cannot touch. So fall back to the URL the
-   * background worker captured during `action.onClicked`, which is the one
-   * instant activeTab let it look. Without that fallback the panel cannot
-   * offer a targeted grant and the user gets a second, pointless prompt.
+   * `page.url` is empty on Chrome precisely BECAUSE we lack access — the
+   * browser will not name a tab you cannot touch. That is not a failure to
+   * route around; it is the thing the `tabs` permission exists to fix, and
+   * `needs-tabs` is how we ask.
    */
   async refresh(): Promise<void> {
-    let url = page.url;
-    if (!url) url = await this.lastActionUrl();
+    const url = page.url;
 
     const pattern = url ? originPatternFor(url) : null;
     this.pattern = pattern;
@@ -136,20 +164,6 @@ class AccessTracker {
         this.lastError = 'The browser refused the permission request.';
       });
   };
-
-  private async lastActionUrl(): Promise<string> {
-    try {
-      const saved = await chrome.storage.session.get(['ccLastActionTab']);
-      const entry = saved['ccLastActionTab'] as { tabId?: number; url?: string } | undefined;
-      // Only trust it for the tab it was captured on. On any other tab it is
-      // someone else's URL, and offering to enable the wrong site is worse
-      // than offering nothing.
-      if (entry?.url && entry.tabId === page.tabId) return entry.url;
-      return '';
-    } catch {
-      return '';
-    }
-  }
 }
 
 export const access = new AccessTracker();
