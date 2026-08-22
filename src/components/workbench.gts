@@ -65,9 +65,21 @@ export default class Workbench extends Component {
     if (this.ticker !== undefined) clearInterval(this.ticker);
   }
 
-  /** So "did my reload actually take?" is answerable at a glance. */
+  /**
+   * So "did my reload actually take?" is answerable at a glance — and
+   * answerable the SAME way here as on the chrome://extensions card, which
+   * shows the manifest version and nothing else. Two surfaces, one answer.
+   */
   get build(): string {
-    return __BUILD__;
+    return `v${this.manifestVersion} · ${__BUILD__}`;
+  }
+
+  private get manifestVersion(): string {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch {
+      return '?';
+    }
   }
 
   get uptimeLabel(): string {

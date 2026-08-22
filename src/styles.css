@@ -339,3 +339,15 @@ h1 {
 .gate__note {
   margin: 0 0 10px; font-size: 11px; color: var(--text-muted);
 }
+
+/* Diagnostics dump */
+.probe__dump {
+  margin: 10px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.probe__k { color: var(--text-muted); margin-top: 4px; }
+.probe__v { margin: 0 0 0 8px; word-break: break-all; color: var(--text); }
+.probe__v.is-ok { color: var(--success); }
+.probe__v.is-err { color: var(--error); }

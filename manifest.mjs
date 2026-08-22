@@ -9,12 +9,43 @@
 // instead of emitting a superset and hoping nobody looks.
 
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 
-// ONE version, not two. package.json is the source of truth and the manifest
-// follows it, because `npm version` bumps package.json and a hand-maintained
-// copy here would drift silently -- you would find out at store-upload time,
-// when the store rejects a version it has already seen.
-const VERSION = createRequire(import.meta.url)('./package.json').version;
+const require = createRequire(import.meta.url);
+const PKG_VERSION = require('./package.json').version;
+
+/**
+ * ONE version, not two. package.json is the source of truth and the manifest
+ * follows it -- `npm version` bumps package.json, and a hand-maintained copy
+ * here would drift silently, surfacing at store-upload time when the store
+ * rejects a version it has already seen.
+ *
+ * EXCEPT during local development, where the patch is replaced by a build
+ * counter so `chrome://extensions` visibly changes on every reload. That card
+ * is where "did my code update?" actually gets asked, and the manifest version
+ * is the only thing on it. A stable version there has already cost one
+ * debugging cycle, reading a live fix as a failed reload.
+ *
+ * CI is excluded: a store build must be reproducible, and it cannot depend on
+ * an untracked counter sitting on one laptop. `CI=true` is set by GitHub
+ * Actions automatically, so this needs no thought at release time.
+ */
+function resolveVersion() {
+  if (process.env['CI'] || process.env['CC_RELEASE']) return PKG_VERSION;
+  try {
+    const n = parseInt(
+      readFileSync(new URL('./.build-no', import.meta.url), 'utf8').trim(),
+      10,
+    );
+    if (!Number.isFinite(n)) return PKG_VERSION;
+    const [major, minor] = PKG_VERSION.split('.');
+    return `${major}.${minor}.${n}`;
+  } catch {
+    return PKG_VERSION;
+  }
+}
+
+const VERSION = resolveVersion();
 
 const ICONS = {
   16: 'icons/icon16.png',

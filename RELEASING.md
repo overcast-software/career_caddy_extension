@@ -22,7 +22,15 @@ git push && git push --tags
 ```
 
 `manifest.mjs` derives its version from `package.json`, so there is one number,
-not two. `release.yml` asserts the tag matches it and fails loudly if not —
+not two.
+
+**Local builds are different on purpose.** They replace the patch with a
+counter from the gitignored `.build-no`, so `chrome://extensions` visibly
+changes on every reload — that card is where "did my code update?" actually
+gets asked, and the manifest version is the only thing on it. CI sets `CI=true`
+automatically, which switches this off and uses the exact `package.json`
+version, because a store build cannot be reproducible if it depends on an
+untracked counter on one laptop. `CC_RELEASE=1` does the same locally. `release.yml` asserts the tag matches it and fails loudly if not —
 shipping `v2.1.0` containing `2.0.0` gets rejected by the store as a version it
 has already seen, which is a confusing error to receive an hour later.
 

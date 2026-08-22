@@ -16,7 +16,14 @@ import { page } from './page.ts';
  * So: never prompt unbidden. Detect, report honestly, offer a button.
  */
 
-export type AccessState = 'unknown' | 'granted' | 'needs-grant' | 'ungrantable';
+export type AccessState =
+  | 'unknown'
+  | 'granted'
+  | 'needs-grant'
+  /** We cannot even see which page this is, so we cannot ask for it. */
+  | 'needs-tabs'
+  /** chrome:// , about: , file:// — nothing grantable here. */
+  | 'ungrantable';
 
 class AccessTracker {
   @tracked state: AccessState = 'unknown';
@@ -27,6 +34,10 @@ class AccessTracker {
 
   get needsGrant(): boolean {
     return this.state === 'needs-grant';
+  }
+
+  get needsTabs(): boolean {
+    return this.state === 'needs-tabs';
   }
 
   get canRead(): boolean {
@@ -55,9 +66,18 @@ class AccessTracker {
     }
 
     if (!pattern) {
-      // chrome:// , about: , file:// , the new-tab page. Not grantable, and
-      // saying "enable on this site" would be a button that cannot work.
-      this.state = 'ungrantable';
+      // TWO very different reasons land here, and conflating them produced a
+      // panel that said "nothing to read on this kind of page" while sitting
+      // next to a Greenhouse posting.
+      //
+      //   url === ''  -> we cannot SEE the page. Chrome withholds tab.url
+      //                  without host access, and the worker's action-click
+      //                  stash did not reach us either. Fixable: the `tabs`
+      //                  permission reveals URLs WITHOUT granting host
+      //                  access, which is enough to then ask for the origin.
+      //   url set     -> genuinely chrome:// / about: / file://. Nothing to
+      //                  grant; saying so is the honest answer.
+      this.state = url ? 'ungrantable' : 'needs-tabs';
       return;
     }
 
@@ -83,6 +103,32 @@ class AccessTracker {
         }
         // A fresh grant means Chrome will now report this tab's URL, so
         // re-read the page before anything renders against stale state.
+        await page.refresh();
+        await this.refresh();
+      })
+      .catch(() => {
+        this.lastError = 'The browser refused the permission request.';
+      });
+  };
+
+  /**
+   * Ask for `tabs`, which makes every tab's URL visible WITHOUT granting host
+   * access to any of them. It is the escape from the chicken-and-egg: you
+   * cannot request permission to a page you are not allowed to identify.
+   *
+   * Deliberately a separate, milder step than granting a site. Declared in
+   * `optional_permissions` already, so this costs no install-time prompt.
+   *
+   * Not async — permissions.request needs the gesture unspent.
+   */
+  grantTabs = (): void => {
+    void chrome.permissions
+      .request({ permissions: ['tabs'] })
+      .then(async (ok) => {
+        if (!ok) {
+          this.lastError = 'Without this, the panel cannot tell which page you are on.';
+          return;
+        }
         await page.refresh();
         await this.refresh();
       })
