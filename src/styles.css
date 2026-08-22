@@ -265,3 +265,47 @@ h1 {
 }
 .sec__body { padding: 2px 2px 12px; }
 .sec__body--tab { padding-top: 12px; }
+
+/* ── Connect + send ───────────────────────────────────────────────────── */
+.conn { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.conn--ok { font-size: 12px; color: var(--text-muted); }
+.conn__who { flex: 1 1 auto; }
+.conn__staff {
+  margin-left: 4px; padding: 1px 5px; font-size: 10px; border-radius: 3px;
+  color: var(--accent-600); background: var(--accent-50);
+}
+.conn__btn {
+  flex: 1 1 auto; padding: 7px 12px; font: inherit; font-weight: 600;
+  color: #fff; background: var(--accent-600); border: 0; border-radius: 6px;
+  cursor: pointer;
+}
+.conn__btn:hover:not(:disabled) { background: var(--accent-500); }
+.conn__btn:disabled { opacity: 0.6; cursor: default; }
+.conn__link {
+  padding: 0; font: inherit; font-size: 11px; color: var(--text-muted);
+  background: none; border: 0; text-decoration: underline; cursor: pointer;
+}
+.conn__link:hover { color: var(--accent-500); }
+.conn__hint, .conn__msg {
+  margin: 0 0 10px; font-size: 11px; line-height: 1.45; color: var(--text-muted);
+}
+.conn__msg { color: var(--text); }
+
+.send__opt {
+  display: flex; align-items: center; gap: 6px;
+  margin: 8px 0; font-size: 12px; color: var(--text-muted);
+}
+.send__btn {
+  width: 100%; padding: 8px 12px; font: inherit; font-weight: 600;
+  color: #fff; background: var(--accent-600); border: 0; border-radius: 6px;
+  cursor: pointer;
+}
+.send__btn:hover:not(:disabled) { background: var(--accent-500); }
+.send__btn:disabled { opacity: 0.6; cursor: default; }
+.send__status { margin: 8px 0 0; font-size: 11px; line-height: 1.45; }
+.send__status--error { color: var(--error); }
+.send__status--ok { color: var(--success); }
+.send__status--busy { color: var(--text-muted); }
+.send__link {
+  display: inline-block; margin-top: 6px; font-size: 11px; color: var(--accent-500);
+}

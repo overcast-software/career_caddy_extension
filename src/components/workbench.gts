@@ -4,8 +4,12 @@ import DraftBox from './draft-box.gts';
 import PermissionProbe from './permission-probe.gts';
 import SectionSet from './section-set.gts';
 import Section from './section.gts';
+import ConnectCard from './connect-card.gts';
+import SendCard from './send-card.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
+import { session } from '../state/session.ts';
+import { page } from '../state/page.ts';
 
 /**
  * The panel root.
@@ -24,7 +28,6 @@ import { layout } from '../state/layout.ts';
 export default class Workbench extends Component {
   @tracked uptime = 0;
   @tracked draft = '';
-  @tracked pageUrl = '(reading…)';
 
   /**
    * `number | undefined` because the field genuinely has no value until the
@@ -39,7 +42,8 @@ export default class Workbench extends Component {
     super(owner, args);
     this.ticker = setInterval(() => (this.uptime += 1), 1000);
     void layout.load();
-    void this.readActiveTab();
+    void session.load();
+    page.start();
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */
@@ -55,11 +59,7 @@ export default class Workbench extends Component {
   }
 
   get host(): string {
-    try {
-      return new URL(this.pageUrl).hostname;
-    } catch {
-      return this.pageUrl;
-    }
+    return page.host || '(no page)';
   }
 
   /**
@@ -75,15 +75,6 @@ export default class Workbench extends Component {
     ];
   }
 
-  private async readActiveTab(): Promise<void> {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      this.pageUrl = tab?.url ?? '(no active tab)';
-    } catch {
-      this.pageUrl = '(cannot read the active tab)';
-    }
-  }
-
   updateDraft = (next: string): void => {
     this.draft = next;
   };
@@ -94,14 +85,12 @@ export default class Workbench extends Component {
       <p class="wb__sub">Glimmer · side panel</p>
     </header>
 
+    <ConnectCard />
+
     <SectionSet @sections={{this.sections}} />
 
       <Section @id="page" @sections={{this.sections}}>
-        <p class="wb__url">{{this.pageUrl}}</p>
-        <p class="wb__hint">
-          Sending, tracking and scoring land here. Empty for now — this is the
-          shell the import fills in.
-        </p>
+        <SendCard />
       </Section>
 
       <Section @id="answers" @sections={{this.sections}}>
