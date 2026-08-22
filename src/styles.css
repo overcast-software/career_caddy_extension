@@ -43,15 +43,8 @@ body {
   background: var(--bg);
 }
 
-/* The popup is a fixed box — Chrome caps it at 800x600 and the 2.x extension
-   pins it to 320px wide. */
-body.popup {
-  width: 320px;
-  padding: 16px;
-}
-
-/* The panel is the opposite: full window height, width chosen by the user.
-   This is the vertical space the popup never had. */
+/* The panel is the only surface. Full window height, width chosen by the user
+   — the vertical space the 320px popup never had. */
 body.panel {
   min-height: 100vh;
   padding: 16px;
@@ -82,8 +75,7 @@ h1 {
   margin: 0;
 }
 
-.wb__hint,
-.sc__hint {
+.wb__hint {
   margin: 8px 0 0;
   font-size: 11px;
   line-height: 1.45;
@@ -121,25 +113,3 @@ h1 {
   color: var(--text-muted);
 }
 
-.sc__btn {
-  width: 100%;
-  margin-top: 12px;
-  padding: 8px 12px;
-  font: inherit;
-  font-weight: 600;
-  color: #fff;
-  background: var(--accent-600);
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.sc__btn:hover {
-  background: var(--accent-500);
-}
-
-.sc__status {
-  margin: 8px 0 0;
-  font-size: 11px;
-  color: var(--text-muted);
-}

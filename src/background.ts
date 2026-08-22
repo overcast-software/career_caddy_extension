@@ -2,9 +2,6 @@
 // service worker after a short idle, Firefox does the same to its event page.
 // Anything time-based must therefore go through chrome.alarms, which survives
 // termination and wakes the worker back up — setInterval does not.
-//
-// Deliberately near-empty for this slice. The scrape/score/match polling from
-// the 2.x extension lands here next.
 
 /**
  * `declare const` describes a value that exists but is not defined HERE — it
@@ -13,20 +10,36 @@
  */
 declare const __TARGET__: 'chrome' | 'firefox';
 
-// Chrome only: make the toolbar icon open the popup (the default), NOT the
-// panel. We want the popup for "send this page" and the panel opened
-// deliberately from it.
+// The toolbar icon opens the panel directly. There is no popup.
 //
-// This is a build-time branch, not a runtime one. `chrome.sidePanel?.…` with
-// optional chaining would be SAFE on Firefox -- it would never throw -- but
+// These are build-time branches, not runtime ones. `chrome.sidePanel?.…` with
+// optional chaining would be SAFE on Firefox — it would never throw — but
 // web-ext lint still sees the static reference and reports UNSUPPORTED_API,
 // which an AMO reviewer then has to read and dismiss. Because __TARGET__ is
-// substituted with a literal, Rollup drops this whole block from the Firefox
-// bundle and the warning disappears along with the code.
+// substituted with a literal, Rollup drops the whole dead branch and the
+// warning goes with it.
 if (__TARGET__ === 'chrome') {
+  // One line, no click handler: Chrome wires the action button to the panel
+  // itself. It only works because the manifest declares no default_popup —
+  // a popup would win and this would silently do nothing.
   chrome.runtime.onInstalled.addListener(() => {
-    void chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {
-      // Chrome older than 114. Nothing to configure.
-    });
+    void chrome.sidePanel
+      ?.setPanelBehavior({ openPanelOnActionClick: true })
+      .catch(() => {
+        // Chrome older than 114. The icon will do nothing; acceptable, since
+        // the manifest's minimum is well above that.
+      });
+  });
+} else {
+  // Firefox has no equivalent switch, so we handle the click ourselves.
+  // `onClicked` only fires when there is no default_popup — same precondition
+  // as Chrome's, arrived at from the opposite direction.
+  //
+  // The gesture requirement is satisfied: onClicked IS the user gesture, and
+  // we call toggle() synchronously inside it rather than awaiting anything
+  // first. Firefox also contributes its own sidebar button from
+  // `sidebar_action`, so this is a second door to the same room.
+  chrome.action.onClicked.addListener(() => {
+    void globalThis.browser?.sidebarAction?.toggle();
   });
 }

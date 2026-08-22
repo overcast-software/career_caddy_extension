@@ -97,12 +97,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: `dist/${target}`,
       emptyOutDir: true,
-      // An extension has no index.html and no SPA router. Each surface is its
-      // own document with its own entrypoint; Rollup splits the shared Glimmer
-      // runtime into a chunk both of them import.
+      // Two entries, and neither is an index.html — an extension has no SPA
+      // shell and no router. The panel is the only UI surface; background.ts
+      // is a separate runtime with no DOM at all.
       rollupOptions: {
         input: {
-          popup: 'popup.html',
           panel: 'panel.html',
           background: 'src/background.ts',
         },

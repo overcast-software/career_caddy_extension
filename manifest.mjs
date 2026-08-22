@@ -28,9 +28,15 @@ const SHARED = {
   permissions: ['activeTab', 'scripting', 'storage', 'notifications', 'alarms'],
   host_permissions: ['https://careercaddy.online/*'],
   icons: ICONS,
+  // NO default_popup. Declaring one makes the toolbar icon open the popup and
+  // nothing else -- on Chrome it even overrides openPanelOnActionClick. With
+  // it absent the click reaches background.js, which opens the panel.
+  //
+  // This is the whole extension now: one surface, always the panel. The
+  // earlier popup-plus-panel split made "open the workbench" a step you had to
+  // take before doing anything, which is a toll booth in front of the feature.
   action: {
     default_title: 'Career Caddy',
-    default_popup: 'popup.html',
     default_icon: ICONS,
   },
 };

@@ -36,10 +36,23 @@ unpacked* → select `extension/dist/chrome`.
 **Firefox** — `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on*
 → select `extension/dist/firefox/manifest.json`.
 
-Then: click the toolbar icon → **Open the workbench** → the panel docks to the
-side of the window. Click into the page, type in a form, switch tabs. The
-uptime counter never resets and the draft stays put — that is the whole
-architectural argument, made visible.
+Then click the toolbar icon — the panel docks to the side of the window. Click
+into the page, type in a form, switch tabs. The uptime counter never resets and
+the draft stays put; that is the whole architectural argument, made visible.
+
+## One surface, not two
+
+There is **no popup**. An earlier revision had one for "send this page" and a
+panel for everything else, which made *open the workbench* a toll booth in
+front of the feature. The toolbar icon opens the panel directly:
+
+- **Chrome** — `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`,
+  set once on install.
+- **Firefox** — `action.onClicked` → `sidebarAction.toggle()`. Firefox also
+  contributes its own sidebar button, so there are two doors to the same room.
+
+Both depend on the manifest declaring **no `default_popup`**. A popup would win
+and the panel would never open.
 
 ## Layout
 
@@ -47,12 +60,11 @@ architectural argument, made visible.
 manifest.mjs          one source, two manifests (Chrome side_panel vs Firefox sidebar_action)
 vite.config.mjs       ember-source resolver + build-time template compilation
 scripts/csp-gate.mjs  the MV3 install-time guard
-popup.html            "send this page" — a 320px box, destroyed on blur
-panel.html            the workbench — full window height, survives clicks
+panel.html            the only UI surface — full window height, survives clicks
 src/
-  popup.ts panel.ts   two renderComponent calls; no app object in either
+  panel.ts            the whole bootstrap: one renderComponent call, no app object
   components/*.gts    template + class in one file
-  lib/panel.ts        the sidePanel / sidebarAction adapter
+  types/webext.d.ts   ambient types for what @types/chrome does not cover
   background.ts       MV3 worker (non-persistent — use chrome.alarms, not setInterval)
 public/icons/         copied verbatim into dist by Vite
 ```
