@@ -183,3 +183,85 @@ h1 {
 .probe__empty {
   color: var(--text-muted);
 }
+
+/* ── Section set: accordion or tabs over the same content ─────────────── */
+.sset__switch {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+}
+.sset__switch-btn {
+  flex: 1 1 auto;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+}
+.sset__switch-btn:first-child { border-radius: 5px 0 0 5px; }
+.sset__switch-btn:last-child { border-radius: 0 5px 5px 0; border-left: 0; }
+.sset__switch-btn.is-on {
+  color: var(--text);
+  background: var(--bg-soft);
+  border-color: var(--accent-500);
+}
+
+.sset__tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.sset__tab {
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+.sset__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent-500);
+}
+
+.sec {
+  border-bottom: 1px solid var(--border);
+}
+.sec__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 2px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.sec__head:hover .sec__title { color: var(--accent-500); }
+.sec__chevron {
+  flex: 0 0 auto;
+  width: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.sec__title { font-weight: 600; }
+/* The collapsed summary is why an accordion beats tabs here: a shut section
+   still tells you its state, where a hidden tab tells you nothing. */
+.sec__summary {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sec__body { padding: 2px 2px 12px; }
+.sec__body--tab { padding-top: 12px; }

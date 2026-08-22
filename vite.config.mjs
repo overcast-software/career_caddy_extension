@@ -45,10 +45,33 @@ function emberSourceResolver({ dev = false } = {}) {
 // about": Chrome refuses to install the extension. scripts/csp-gate.mjs
 // enforces this on the built output so it can never regress silently.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// `enforce: 'pre'` IS LOAD-BEARING. Do not change it to 'post'.
+//
+// Vite hands .ts files to esbuild, which implements TC39 STANDARD decorators
+// and calls a decorator as `tracked(undefined, context)`. `@glimmer/tracking`'s
+// `tracked` is a LEGACY decorator expecting `(target, key, descriptor)`, so it
+// receives `undefined` as its target and stores it as a WeakMap key. The whole
+// module then dies at evaluation with:
+//
+//     Uncaught TypeError: Invalid value used as weak map key
+//
+// …and because that happens during module evaluation, the panel renders
+// NOTHING, with an empty #root and no error from any code you wrote. It looks
+// exactly like "the extension didn't load".
+//
+// .gts files hid this: content-tag rewrites them before esbuild sees them, so
+// they reached decorator-transforms correctly while plain .ts files did not —
+// two different decorator protocols in one bundle, only one of them right.
+//
+// Running 'pre' means babel strips the types, compiles the templates and
+// lowers the decorators FIRST; esbuild then only ever sees plain JS with no
+// decorators left to misinterpret.
+// ---------------------------------------------------------------------------
 function glimmerBabel() {
   return {
     name: 'glimmer-babel',
-    enforce: 'post',
+    enforce: 'pre',
     async transform(code, id) {
       if (id.includes('node_modules')) return null;
       if (!/\.(gts|gjs|ts|js)($|\?)/.test(id)) return null;
