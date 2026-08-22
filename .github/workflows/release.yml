@@ -1,0 +1,84 @@
+name: Release
+
+# Tag -> build -> GitHub Release with both zips attached.
+#
+# This workflow deliberately does NOT touch either store. Cutting a release is
+# reversible; submitting to a store is not, and it starts a review clock you
+# cannot cancel. Store submission is publish.yml, which is manually triggered.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The tag must match the version the manifest will actually carry, or
+      # you ship v3.1.0 containing 3.0.0 and the store rejects a version it
+      # has already seen. manifest.mjs reads package.json, so checking
+      # package.json checks the manifest.
+      - name: Assert tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "✗ tag v$TAG does not match package.json $PKG"
+            exit 1
+          fi
+          echo "✓ v$TAG"
+
+      - name: Build both targets (runs the CSP gate)
+        run: npm run build
+
+      - name: Package
+        run: |
+          cd dist/chrome  && zip -qr "../../career-caddy-sender-${GITHUB_REF_NAME#v}-chrome.zip"  . && cd ../..
+          cd dist/firefox && zip -qr "../../career-caddy-sender-${GITHUB_REF_NAME#v}-firefox.zip" . && cd ../..
+
+      # AMO requires reviewable source plus reproducible build instructions for
+      # any bundled extension. `git archive` is exactly right for this: it emits
+      # the tracked tree at the tag, so node_modules/ and dist/ are excluded by
+      # virtue of never having been committed, and what a reviewer receives is
+      # byte-identical to what built the artifact.
+      - name: Source archive for AMO review
+        run: git archive --format=zip -o "career-caddy-sender-${GITHUB_REF_NAME#v}-source.zip" "$GITHUB_REF_NAME"
+
+      - name: Verify the packaged zips have manifest.json at the ROOT
+        run: |
+          for z in career-caddy-sender-*-chrome.zip career-caddy-sender-*-firefox.zip; do
+            unzip -l "$z" | grep -qE ' manifest\.json$' || { echo "✗ $z: manifest.json is not at the zip root"; exit 1; }
+            echo "✓ $z"
+          done
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: career-caddy-sender-*.zip
+          generate_release_notes: true
+          body: |
+            Built from `${{ github.ref_name }}` by CI. CSP gate and web-ext lint passed.
+
+            | file | for |
+            |---|---|
+            | `*-chrome.zip` | Chrome Web Store upload |
+            | `*-firefox.zip` | AMO upload |
+            | `*-source.zip` | AMO's source-code submission requirement |
+
+            **Sideloading** — Chrome cannot load a zip: unzip it and use
+            *Load unpacked* on the folder. Firefox takes the zip directly via
+            `about:debugging` → *Load Temporary Add-on*.
+
+            Submitting to the stores is a separate, manual step: run the
+            **Publish** workflow.

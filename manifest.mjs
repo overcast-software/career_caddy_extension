@@ -8,7 +8,13 @@
 // permission. Reviewers read warnings. So we emit the right one per target
 // instead of emitting a superset and hoping nobody looks.
 
-const VERSION = '3.0.0';
+import { createRequire } from 'node:module';
+
+// ONE version, not two. package.json is the source of truth and the manifest
+// follows it, because `npm version` bumps package.json and a hand-maintained
+// copy here would drift silently -- you would find out at store-upload time,
+// when the store rejects a version it has already seen.
+const VERSION = createRequire(import.meta.url)('./package.json').version;
 
 const ICONS = {
   16: 'icons/icon16.png',

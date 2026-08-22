@@ -1,0 +1,167 @@
+name: Publish
+
+# Submit a released build to the stores. MANUAL ONLY, and deliberately so:
+# a store submission cannot be withdrawn once review starts, it can trigger a
+# permission re-consent prompt for every existing user, and a bad build that
+# passes review reaches everyone automatically. None of that should be one
+# `git push` away.
+#
+# Each store is opted into separately, because their failure modes are
+# unrelated and you will often want to ship one without the other.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v3.1.0)'
+        required: true
+        type: string
+      chrome:
+        description: 'Submit to the Chrome Web Store'
+        type: boolean
+        default: false
+      firefox:
+        description: 'Submit to AMO (Firefox)'
+        type: boolean
+        default: false
+      chrome_publish:
+        description: 'Chrome: publish after upload (unchecked = upload as draft only)'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package + source archive
+        run: |
+          cd dist/chrome  && zip -qr ../../chrome.zip  . && cd ../..
+          cd dist/firefox && zip -qr ../../firefox.zip . && cd ../..
+          git archive --format=zip -o source.zip "${{ inputs.tag }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles
+          path: |
+            chrome.zip
+            firefox.zip
+            source.zip
+
+  chrome:
+    needs: build
+    if: inputs.chrome
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: chrome-web-store
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+
+      # Raw curl against the Chrome Web Store API rather than a marketplace
+      # action. This step holds a credential that can publish to every existing
+      # user; a third-party action is a supply-chain hole pointed directly at
+      # it. The API is three calls and they are all visible here.
+      #
+      # OPERATIONAL TRAP: a CWS refresh token is invalidated after ~6 months
+      # WITHOUT USE. If you release infrequently -- which is the normal state
+      # for this extension -- the token will be dead exactly when you need it.
+      # Re-mint it rather than debugging the 400.
+      - name: Upload to Chrome Web Store
+        env:
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          set -euo pipefail
+
+          TOKEN=$(curl -sf -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=$CLIENT_ID" \
+            -d "client_secret=$CLIENT_SECRET" \
+            -d "refresh_token=$REFRESH_TOKEN" \
+            -d "grant_type=refresh_token" | node -p "JSON.parse(require('fs').readFileSync(0)).access_token")
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "undefined" ]; then
+            echo "✗ could not exchange the refresh token — it has most likely expired from disuse"
+            exit 1
+          fi
+
+          RESULT=$(curl -s -X PUT \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -T chrome.zip \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$EXTENSION_ID")
+          echo "$RESULT"
+          echo "$RESULT" | grep -q '"uploadState": *"SUCCESS"' || {
+            echo "✗ upload rejected"; exit 1; }
+          echo "✓ uploaded as a draft"
+
+      - name: Publish (only if explicitly requested)
+        if: inputs.chrome_publish
+        env:
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sf -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=$CLIENT_ID" -d "client_secret=$CLIENT_SECRET" \
+            -d "refresh_token=$REFRESH_TOKEN" -d "grant_type=refresh_token" \
+            | node -p "JSON.parse(require('fs').readFileSync(0)).access_token")
+          curl -sf -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$EXTENSION_ID/publish"
+          echo "✓ submitted for review"
+
+  firefox:
+    needs: build
+    if: inputs.firefox
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: amo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+      - run: unzip -q -o firefox.zip -d dist/firefox
+
+      # --upload-source-code is what satisfies AMO's requirement that bundled
+      # or minified extensions ship reviewable source. Without it a human has
+      # to attach the archive by hand in the AMO dashboard on every release,
+      # which is the step that gets forgotten.
+      #
+      # --approval-timeout 0 stops the job waiting for a human reviewer.
+      # Mozilla does not auto-approve LISTED submissions, so without this the
+      # job sits until it times out and reports failure on a submission that
+      # actually succeeded.
+      - name: Submit to AMO
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          npx web-ext sign \
+            --source-dir dist/firefox \
+            --upload-source-code source.zip \
+            --channel listed \
+            --approval-timeout 0
+          echo "✓ submitted — AMO review is asynchronous; watch the dashboard"

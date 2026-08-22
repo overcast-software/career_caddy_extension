@@ -1,0 +1,92 @@
+name: CI
+
+# The gate the 2.x extension never had. It lived in frontend/public/extensions/,
+# excluded from prettier and eslint with no test suite, so a green frontend CI
+# said nothing at all about extension changes -- the only real check was
+# `node --check` plus a human clicking through a sideload.
+on:
+  push:
+    branches: [main, 'feature/**', 'fix/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, CSP gate, lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `ci` not `install`: it installs exactly the lockfile and fails if
+      # package.json and the lock have drifted. AMO requires reproducible
+      # builds, and "npm install rewrote the lock during CI" is how that
+      # promise quietly stops being true.
+      - run: npm ci
+
+      # Builds BOTH targets. Each build ends by running scripts/csp-gate.mjs,
+      # which fails if `eval` or `new Function` reaches the output.
+      #
+      # This is the single most important check in this workflow. MV3 permits
+      # only 'none', 'self' and 'wasm-unsafe-eval' in script-src, so a build
+      # containing either is rejected by Chrome AT INSTALL TIME -- the failure
+      # mode is "nobody can install it", not "one feature is broken". The way
+      # it would regress is a stray import pulling in @ember/template-compiler,
+      # which is built around new Function().
+      - name: Build (runs the CSP gate)
+        run: npm run build
+
+      # Mozilla's own validator. Errors fail the build; warnings do not, but
+      # they are printed because an AMO reviewer reads them too.
+      #
+      # Three UNSAFE_VAR_ASSIGNMENT warnings for insertAdjacentHTML are
+      # EXPECTED and unfixable here: they are inside ember-source's Glimmer
+      # runtime (its SafeString path), not our code, and tree-shaking cannot
+      # drop them because the path is reachable in principle. See RELEASING.md.
+      - name: web-ext lint (Firefox)
+        run: npx web-ext lint --source-dir dist/firefox
+
+      # Chrome has no equivalent CLI validator, so assert the shape of its
+      # manifest directly. Both of these have already caused a silent failure
+      # once: a declared default_popup overrides openPanelOnActionClick, and
+      # the panel then simply never opens with nothing in any console.
+      - name: Assert Chrome manifest shape
+        run: |
+          node -e '
+            const m = require("./dist/chrome/manifest.json");
+            const fail = (msg) => { console.error("✗", msg); process.exit(1); };
+            if (m.action.default_popup) fail("default_popup would override openPanelOnActionClick — the panel would never open");
+            if (!m.side_panel?.default_path) fail("side_panel.default_path missing");
+            if (!m.permissions.includes("sidePanel")) fail("sidePanel permission missing");
+            if (m.sidebar_action) fail("Firefox-only sidebar_action leaked into the Chrome manifest");
+            console.log("✓ chrome manifest shape");
+          '
+
+      - name: Assert Firefox manifest shape
+        run: |
+          node -e '
+            const m = require("./dist/firefox/manifest.json");
+            const fail = (msg) => { console.error("✗", msg); process.exit(1); };
+            if (m.action.default_popup) fail("default_popup would suppress action.onClicked — the sidebar toggle would never fire");
+            if (!m.sidebar_action?.default_panel) fail("sidebar_action.default_panel missing");
+            if (m.side_panel) fail("Chrome-only side_panel leaked into the Firefox manifest");
+            if (m.permissions.includes("sidePanel")) fail("Chrome-only sidePanel permission leaked into the Firefox manifest");
+            console.log("✓ firefox manifest shape");
+          '
+
+      # So a reviewer on the PR can load the actual build instead of taking
+      # the diff on faith.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unpacked-builds
+          path: dist/
+          retention-days: 14
