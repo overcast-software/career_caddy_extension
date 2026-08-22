@@ -351,3 +351,47 @@ h1 {
 .probe__v { margin: 0 0 0 8px; word-break: break-all; color: var(--text); }
 .probe__v.is-ok { color: var(--success); }
 .probe__v.is-err { color: var(--error); }
+
+/* ── Already in your library ──────────────────────────────────────────── */
+.tp {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.tp__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.tp__badge {
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--success);
+  border: 1px solid var(--success);
+  border-radius: 3px;
+}
+.tp__score {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-500);
+}
+.tp__score--pending {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.tp__title { margin: 0; font-weight: 600; line-height: 1.35; }
+.tp__company { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
+.tp__link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--accent-500);
+}
+.tp__warn { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
+.tp__looking { margin: 0 0 10px; font-size: 11px; color: var(--text-muted); }

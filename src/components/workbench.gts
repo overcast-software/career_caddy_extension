@@ -6,12 +6,14 @@ import SectionSet from './section-set.gts';
 import Section from './section.gts';
 import ConnectCard from './connect-card.gts';
 import SendCard from './send-card.gts';
+import TrackedCard from './tracked-card.gts';
 import AccessGate from './access-gate.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
+import { trackedPost } from '../state/tracked.ts';
 
 /**
  * The panel root.
@@ -55,9 +57,15 @@ export default class Workbench extends Component {
     page.start();
     // Re-evaluate access on every page change — a grant is per-origin, so
     // switching tabs can move between granted and ungranted sites.
-    page.onChange(() => void access.refresh());
+    page.onChange(() => {
+      void access.refresh();
+      // "Do we already know this page?" is asked on every navigation, not
+      // once at open — a panel outlives many pages.
+      void trackedPost.refresh();
+    });
     access.listen();
     void access.refresh();
+    void trackedPost.refresh();
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */
@@ -122,6 +130,7 @@ export default class Workbench extends Component {
 
       <Section @id="page" @sections={{this.sections}}>
         <AccessGate />
+        <TrackedCard />
         <SendCard />
       </Section>
 

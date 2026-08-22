@@ -53,13 +53,27 @@ export interface RequestOptions {
    * is exactly why this is an explicit option and not an oversight.
    */
   noContentType?: boolean;
+  /**
+   * Abort after this long. A lookup that hangs is worse than one that fails:
+   * the panel sits on a spinner with no way forward, and the user cannot tell
+   * a slow network from a broken extension. Everything on the render path
+   * should carry one.
+   */
+  timeoutMs?: number;
 }
 
 export async function request<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResult<T>> {
-  const { method = 'GET', body, token, plainJson = false, noContentType = false } = options;
+  const {
+    method = 'GET',
+    body,
+    token,
+    plainJson = false,
+    noContentType = false,
+    timeoutMs,
+  } = options;
 
   const headers: Record<string, string> = {};
   if (!noContentType) {
@@ -72,15 +86,28 @@ export async function request<T = unknown>(
   // like an empty result set, which has cost people an hour before.
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : undefined;
+
   let response: Response;
   try {
     response = await fetch(`${ORIGIN}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller?.signal,
     });
   } catch (error) {
+    // An abort is a timeout, not a network failure, and saying so is the
+    // difference between "try again" and "check your connection".
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { ok: false, status: 0, error: 'Career Caddy took too long to respond.' };
+    }
     return { ok: false, status: 0, error: describeNetworkError(error) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 
   if (response.status === 204) {

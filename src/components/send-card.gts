@@ -5,6 +5,7 @@ import { request, FRONTEND_ORIGIN } from '../lib/api.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
+import { trackedPost } from '../state/tracked.ts';
 
 /**
  * "Send this page" — the extension's most-used action.
@@ -43,6 +44,18 @@ export default class SendCard extends Component {
   /** Sending a Career Caddy page to Career Caddy is never what you meant. */
   get isOnCareerCaddy(): boolean {
     return page.isCareerCaddy;
+  }
+
+  /**
+   * Hide Send when the posting is already in the library and complete.
+   * Offering it invites a duplicate and buries the score you already have —
+   * <TrackedCard> is showing what we know instead.
+   *
+   * An INCOMPLETE post is the exception: re-sending is then the useful action,
+   * because it refreshes an extraction that never finished.
+   */
+  get alreadyKnown(): boolean {
+    return trackedPost.isKnown && !trackedPost.needsRefresh;
   }
 
   get scrapeUrl(): string {
@@ -152,6 +165,8 @@ export default class SendCard extends Component {
       <p class="wb__hint">
         You're on Career Caddy itself — nothing to send from here.
       </p>
+    {{else if this.alreadyKnown}}
+      {{! TrackedCard is showing it. Nothing to offer. }}
     {{else}}
       <label class="send__opt">
         <input
