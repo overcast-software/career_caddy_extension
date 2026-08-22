@@ -32,6 +32,36 @@ const SHARED = {
   // grants host access only when the user invokes the action, which is why no
   // broad host permission is needed. Adding one triggers re-consent on update.
   permissions: ['activeTab', 'scripting', 'storage', 'notifications', 'alarms'],
+
+  // Carried over from 2.3.0. Dropping it silently disabled the signal
+  // ladder's T1 (opener tab) and T2 (open-tabs scan) tiers with no way for
+  // the user to re-enable them. Optional, so it costs nothing at install.
+  optional_permissions: ['tabs'],
+
+  // ─── THE activeTab PROBLEM ───────────────────────────────────────────────
+  // `activeTab` grants host access to ONE tab, at the moment the user invokes
+  // the action, and the grant is REVOKED when that tab navigates. That is
+  // sufficient for a popup, which dies almost immediately anyway.
+  //
+  // A side panel is the opposite: it is open for minutes, across tab switches
+  // and navigations, and every capability worth having goes through
+  // scripting.executeScript into whatever tab the user is now looking at. So
+  // the grant this extension has relied on since 1.x expires under exactly the
+  // conditions the panel exists to create — and it fails LATE and in disguise,
+  // reading as "the selectors didn't match this site".
+  //
+  // Re-clicking the action does not renew it either: with
+  // openPanelOnActionClick the click toggles the panel shut.
+  //
+  // The fix is a durable per-origin grant the user opts into from inside the
+  // panel, via permissions.request({origins:[...]}). Optional, so the install
+  // screen stays clean and nobody is asked for <all_urls> up front.
+  //
+  // Declared now so the phase-0 matrix can actually test the "with a granted
+  // origin" row. Whether the panel ASKS for it is a UX decision that the
+  // matrix result should drive — see RELEASING.md / GLIMMER-REWRITE.md.
+  optional_host_permissions: ['https://*/*'],
+
   host_permissions: ['https://careercaddy.online/*'],
   icons: ICONS,
   // NO default_popup. Declaring one makes the toolbar icon open the popup and

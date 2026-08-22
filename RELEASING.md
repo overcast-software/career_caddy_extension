@@ -31,13 +31,24 @@ Then run **Publish** from the Actions tab, ticking the stores you want.
 ## Version policy
 
 Published today: **Chrome 1.1.0, Firefox 1.1.1** (May 2026). Everything from
-1.2.0 through 2.3.0 was a local test marker that never left a laptop. So 3.0.0
-is the first submission in over a year, and both stores will treat it as a
-major change rather than an update.
+1.2.0 through 2.3.0 was a local test marker that never left a laptop.
 
-A version must be **strictly higher** than what the store already has, and a
-version can never be reused — not even after a rejection. Bump on every
-resubmission.
+**There is no installed user base.** That removes the constraint that usually
+dominates extension release planning, and it is worth being explicit about
+what it does and does not change:
+
+- **Gone:** any concern about disrupting existing installs. Permission changes
+  do not cost you a re-consent wave, because there is nobody to re-consent.
+  Do not sequence work around avoiding one.
+- **Gone:** pressure to preserve behaviour for compatibility. 3.x can break
+  anything 2.x did.
+- **Still applies:** the stores enforce **monotonically increasing versions**,
+  and a version number is burned once submitted — even by a rejected
+  submission. That is a store rule about their own records, not about users,
+  so bump on every resubmission regardless.
+
+So version numbers here are bookkeeping for two review queues, not a promise to
+anyone. Spend them freely.
 
 ## Secrets
 
@@ -106,12 +117,23 @@ Permission justifications, current as of 3.0.0:
 | `sidePanel` | the extension's only UI surface |
 | `host_permissions: careercaddy.online` | the user's own instance — the only server contacted |
 
-### Both: 3.0.0 changes permissions
+### Both: permissions are still a review question, just not a user one
 
-`sidePanel` is new since the published 1.1.x. **Existing users will be prompted
-to re-consent on update**, and some fraction never will. This is a one-time
-cost; spend it once by batching any other permission change into this release
-rather than shipping a second prompt later.
+`sidePanel` is new since 1.1.x, and an `optional_host_permissions` entry has
+been added for the `activeTab` problem (see `manifest.mjs`). With no installed
+base there is no re-consent wave to plan around — but **reviewers still read
+the permission list**, and a broad host permission is the single thing most
+likely to turn an automated review into a manual one.
+
+That is now the *only* argument against simply declaring
+`host_permissions: ["<all_urls>"]` and being done with the `activeTab`
+expiry problem. It remains a good argument, for two reasons that outlive the
+user count:
+
+1. Review friction and time-to-publish, on both stores.
+2. The product's own claim — the listing says it reads job postings and talks
+   to your own instance. A blanket grant makes that claim weaker than the
+   optional per-origin flow does, whether or not anyone is currently checking.
 
 ## Before you submit
 

@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import DraftBox from './draft-box.gts';
+import PermissionProbe from './permission-probe.gts';
 
 /**
  * The panel root.
@@ -95,5 +96,7 @@ export default class Workbench extends Component {
       @value={{this.draft}}
       @onInput={{this.updateDraft}}
     />
+
+    <PermissionProbe />
   </template>
 }

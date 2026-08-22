@@ -113,3 +113,73 @@ h1 {
   color: var(--text-muted);
 }
 
+
+/* Phase 0 permission probe — temporary; delete with the component. */
+.probe {
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.probe__summary {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.probe__url,
+.probe__grant {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+.probe__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.probe__btn {
+  padding: 5px 9px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.probe__btn:hover {
+  border-color: var(--accent-500);
+}
+.probe__log {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.probe__entry {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px;
+  padding: 3px 0;
+  border-top: 1px solid var(--border);
+}
+.probe__at,
+.probe__where {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.probe__ok {
+  color: var(--success);
+  word-break: break-word;
+}
+.probe__err {
+  color: var(--error);
+  word-break: break-word;
+}
+.probe__empty {
+  color: var(--text-muted);
+}
