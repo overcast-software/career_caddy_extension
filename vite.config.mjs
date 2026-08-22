@@ -5,9 +5,35 @@ import { createRequire } from 'node:module';
 import templateCompilation from 'babel-plugin-ember-template-compilation';
 import decoratorTransforms from 'decorator-transforms';
 import typescript from '@babel/plugin-transform-typescript';
+import { execSync } from 'node:child_process';
 import { buildManifest } from './manifest.mjs';
 
 const require = createRequire(import.meta.url);
+
+// A build stamp the panel can show.
+//
+// The manifest version is deliberately stable across many builds, so during
+// development "did my code actually reload?" is unanswerable from the UI —
+// which cost a real debugging cycle: a fix WAS live, the version looked
+// identical, and the result was read as "the build didn't update".
+// A short SHA plus a clock time answers it at a glance.
+function buildStamp() {
+  let sha = 'nogit';
+  try {
+    sha = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    /* not a git checkout */
+  }
+  const dirty = (() => {
+    try {
+      return execSync('git status --porcelain', { encoding: 'utf8' }).trim() ? '+' : '';
+    } catch {
+      return '';
+    }
+  })();
+  const at = new Date().toTimeString().slice(0, 5);
+  return `${sha}${dirty} ${at}`;
+}
 
 // ---------------------------------------------------------------------------
 // ember-source ships every @ember/* and @glimmer/* package under
@@ -116,7 +142,10 @@ export default defineConfig(({ mode }) => {
     // is how Chrome-only API calls stay OUT of the Firefox bundle entirely,
     // rather than being guarded at runtime -- a runtime guard is safe but still
     // trips web-ext lint's UNSUPPORTED_API, which an AMO reviewer has to read.
-    define: { __TARGET__: JSON.stringify(target) },
+    define: {
+      __TARGET__: JSON.stringify(target),
+      __BUILD__: JSON.stringify(buildStamp()),
+    },
     build: {
       outDir: `dist/${target}`,
       emptyOutDir: true,

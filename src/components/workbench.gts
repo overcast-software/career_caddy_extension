@@ -25,6 +25,13 @@ import { page } from '../state/page.ts';
  * switch tabs — it keeps counting and the draft keeps its text. A popup would
  * have been destroyed and rebuilt on every one of those.
  */
+/**
+ * Substituted at build time by Vite's `define` — a short git SHA, a `+` when
+ * the tree is dirty, and the build clock time. `declare const` tells the
+ * compiler it exists; nothing is emitted for this line.
+ */
+declare const __BUILD__: string;
+
 export default class Workbench extends Component {
   @tracked uptime = 0;
   @tracked draft = '';
@@ -50,6 +57,11 @@ export default class Workbench extends Component {
   willDestroy(): void {
     super.willDestroy();
     if (this.ticker !== undefined) clearInterval(this.ticker);
+  }
+
+  /** So "did my reload actually take?" is answerable at a glance. */
+  get build(): string {
+    return __BUILD__;
   }
 
   get uptimeLabel(): string {
@@ -82,7 +94,7 @@ export default class Workbench extends Component {
   <template>
     <header class="wb__head">
       <h1 class="wb__title">Career Caddy</h1>
-      <p class="wb__sub">Glimmer · side panel</p>
+      <p class="wb__sub">Glimmer · side panel · <code class="wb__build">{{this.build}}</code></p>
     </header>
 
     <ConnectCard />

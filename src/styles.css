@@ -309,3 +309,10 @@ h1 {
 .send__link {
   display: inline-block; margin-top: 6px; font-size: 11px; color: var(--accent-500);
 }
+
+/* Build stamp — git sha + clock. Answers "did my reload take?" */
+.wb__build {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: var(--text-faint, var(--text-muted));
+}
