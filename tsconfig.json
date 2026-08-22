@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    // Decorators. @tracked is a decorator, and decorator-transforms lowers it
+    // at build time, so TypeScript only needs to accept the syntax.
+    "experimentalDecorators": false,
+    "useDefineForClassFields": false,
+
+    // strict is the whole point of choosing TypeScript. It turns on, among
+    // others, strictNullChecks -- which is what makes `number | undefined`
+    // mean something and forces the guards in lib/panel.ts.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    // .gts files import each other with the extension included; this lets
+    // ordinary .ts imports do the same so every import in the codebase looks
+    // alike.
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "types": ["chrome"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.gts", "*.mjs"],
+
+  // NOTE: plain `tsc` cannot parse .gts -- the <template> tag is not
+  // TypeScript syntax. Type-checking templates needs Glint
+  // (`@glint/core` + `@glint/environment-ember-template-imports`), which is
+  // the natural next addition: it is what makes a component Signature actually
+  // checked at the call site rather than merely documented.
+  "glint": {
+    "environment": "ember-template-imports"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "career-caddy-sender",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Career Caddy browser extension \u2014 Glimmer UI, MV3, Chrome + Firefox.",
+  "scripts": {
+    "build": "npm run build:chrome && npm run build:firefox",
+    "build:chrome": "vite build --mode chrome && npm run gate -- chrome",
+    "build:firefox": "vite build --mode firefox && npm run gate -- firefox",
+    "gate": "node scripts/csp-gate.mjs",
+    "dev": "vite build --mode chrome --watch",
+    "lint:firefox": "web-ext lint --source-dir dist/firefox",
+    "package:firefox": "npm run build:firefox && web-ext build --source-dir dist/firefox --artifacts-dir web-ext-artifacts --overwrite-dest"
+  },
+  "dependencies": {
+    "@glimmer/component": "^2.1.1",
+    "ember-source": "^7.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.1",
+    "@babel/plugin-transform-typescript": "^8.0.1",
+    "@embroider/macros": "^1.20.6",
+    "@embroider/vite": "^1.7.10",
+    "@types/chrome": "^0.1.31",
+    "babel-plugin-ember-template-compilation": "^4.0.0",
+    "content-tag": "^4.2.0",
+    "decorator-transforms": "^2.4.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}

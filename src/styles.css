@@ -1,0 +1,145 @@
+/* Carried over from the 2.x extension: everything is a custom property so
+   light/dark comes free. The palette variants come later; this slice only
+   needs to prove the surfaces render. */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f6f7f9;
+  --bg-input: #ffffff;
+  --border: #e3e6ea;
+  --border-strong: #c9cfd6;
+  --text: #16191d;
+  --text-muted: #5b6470;
+  --accent-50: #eef2ff;
+  --accent-500: #6366f1;
+  --accent-600: #4f46e5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16191d;
+    --bg-soft: #1e2228;
+    --bg-input: #1b1f24;
+    --border: #2a2f36;
+    --border-strong: #3a414a;
+    --text: #e8eaed;
+    --text-muted: #9aa4b0;
+    --accent-50: #1e1b4b;
+    --accent-500: #818cf8;
+    --accent-600: #6366f1;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font:
+    13px/1.5 system-ui,
+    -apple-system,
+    sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* The popup is a fixed box — Chrome caps it at 800x600 and the 2.x extension
+   pins it to 320px wide. */
+body.popup {
+  width: 320px;
+  padding: 16px;
+}
+
+/* The panel is the opposite: full window height, width chosen by the user.
+   This is the vertical space the popup never had. */
+body.panel {
+  min-height: 100vh;
+  padding: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.wb__sub,
+.wb__url {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.wb__proof {
+  margin: 14px 0;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wb__uptime {
+  margin: 0;
+}
+
+.wb__hint,
+.sc__hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.draft__label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.draft__input {
+  width: 100%;
+  padding: 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.draft__input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: 0 0 0 3px var(--accent-50);
+}
+
+.draft__count {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sc__btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent-600);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sc__btn:hover {
+  background: var(--accent-500);
+}
+
+.sc__status {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
