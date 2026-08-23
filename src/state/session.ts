@@ -11,10 +11,17 @@ import type { JsonApiDoc } from '../lib/api.ts';
  * shared machine can be cleaned up from either end.
  */
 
-const KEYS = {
+/**
+ * Exported so no module invents its own key string. A raw literal elsewhere
+ * silently escapes USER_SCOPED_STORAGE_KEYS below, which is the exact leak
+ * that list exists to prevent — state/me.ts did precisely that on its first
+ * draft and cached one account's snippets past a disconnect.
+ */
+export const KEYS = {
   apiKey: 'ccApiKey',
   keyId: 'ccKeyId',
   me: 'ccMe',
+  meCache: 'ccMeCache',
 } as const;
 
 /**
@@ -32,6 +39,7 @@ export const USER_SCOPED_STORAGE_KEYS: readonly string[] = [
   KEYS.apiKey,
   KEYS.keyId,
   KEYS.me,
+  KEYS.meCache,
   'ccExtensionSelectorCache',
   'ccTrackedPages',
   'ccSentPages',

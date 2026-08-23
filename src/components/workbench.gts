@@ -11,6 +11,7 @@ import ConnectCard from './connect-card.gts';
 import SendCard from './send-card.gts';
 import TrackedCard from './tracked-card.gts';
 import LinkCard from './link-card.gts';
+import QuickCopyCard from './quick-copy-card.gts';
 import AccessGate from './access-gate.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
@@ -20,6 +21,7 @@ import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
 import { linkPicker } from '../state/link-picker.ts';
+import { me } from '../state/me.ts';
 import { theme } from '../state/theme.ts';
 
 /**
@@ -70,6 +72,7 @@ export default class Workbench extends Component {
     void theme.load();
     void layout.load();
     void session.load();
+    void me.load();
     page.start();
     // Re-evaluate access on every page change — a grant is per-origin, so
     // switching tabs can move between granted and ungranted sites.
@@ -145,6 +148,11 @@ export default class Workbench extends Component {
   get sections(): SectionSpec[] {
     return [
       { id: 'page', title: 'This page', summary: this.host },
+      {
+        id: 'applications',
+        title: 'Applications',
+        summary: `${me.items.length} snippets`,
+      },
       { id: 'answers', title: 'Answer desk', summary: `${this.draft.length} chars` },
       { id: 'diagnostics', title: 'Diagnostics', summary: `up ${this.uptimeLabel}` },
     ];
@@ -178,6 +186,10 @@ export default class Workbench extends Component {
         <TrackedCard />
         <SendCard />
         <LinkCard />
+      </Section>
+
+      <Section @id="applications" @sections={{this.sections}}>
+        <QuickCopyCard />
       </Section>
 
       <Section @id="answers" @sections={{this.sections}}>

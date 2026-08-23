@@ -648,3 +648,80 @@ h1 {
 .lp__company { display: block; font-size: 11px; color: var(--text-muted); }
 .lp__warn { display: block; margin-top: 2px; font-size: 10px; color: var(--error); }
 .lp__note { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
+
+/* --- quick copy -------------------------------------------------------- */
+/* One row per snippet: icon, name + one-line preview, copy affordance. The
+   value itself is never rendered — a 450-char prompt would take the whole
+   panel, which is what made the legacy card too tall (CCEXT-38). */
+.qc { margin-bottom: 12px; }
+.qc__head {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.qc__list { margin: 0; padding: 0; list-style: none; }
+.qc__row { display: flex; align-items: stretch; gap: 4px; }
+.qc__row + .qc__row { margin-top: 4px; }
+
+.qc__copy {
+  flex: 1;
+  min-width: 0;             /* lets the preview ellipsize instead of pushing */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.qc__copy:hover { border-color: var(--accent-500); }
+
+.qc__icon { display: flex; flex: 0 0 auto; width: 16px; }
+.qc__icon .icon { width: 16px; height: 16px; }
+.qc__emoji { font-size: 14px; line-height: 1; }
+
+.qc__text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.qc__name { font-size: 12px; font-weight: 600; }
+.qc__preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  /* One line, always. The full value lives in the title attribute. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qc__action { flex: 0 0 auto; display: flex; align-items: center; color: var(--text-muted); }
+.qc__action .icon { width: 14px; height: 14px; }
+.qc__failed { font-size: 10px; color: var(--error); }
+
+.qc__open {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 13px;
+  text-decoration: none;
+  color: var(--text-muted);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.qc__open:hover { color: var(--accent-500); border-color: var(--accent-500); }
+.qc__head { display: flex; justify-content: space-between; align-items: baseline; }
+.qc__edit {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-500);
+  text-decoration: none;
+}
+.qc__edit:hover { text-decoration: underline; }
