@@ -142,8 +142,10 @@ interface GolfWindow extends Window {
 /**
  * Paint a mark on each listed field and wait for the panel to connect.
  *
- * Returns true if it installed, false if it was already installed — the panel
- * uses that only for diagnostics; either way the marks work.
+ * Always returns true: a previous install is torn down and replaced rather
+ * than treated as a reason to bail (see the guard). The return value is not
+ * read by the caller and is kept only so the injection result is not
+ * `undefined`.
  *
  * `chrome` is available here because `executeScript` runs in the ISOLATED
  * world by default. `scripts/layering-gate.mjs` forbids `world: 'MAIN'`, which
@@ -157,9 +159,30 @@ export function ccDecorateQuestions(
 ): boolean {
   const win = window as GolfWindow;
 
-  // Idempotent. `executeScript` is one-shot but the panel may re-caddy at any
-  // time, and painting twice would stack two marks per field.
-  if (win.__ccGolfTeardown) return false;
+  // Idempotent: TEAR DOWN AND REPAINT, never bail.
+  //
+  // `executeScript` is one-shot but the panel can re-caddy at any time, and
+  // painting twice would stack two marks per field — so a previous install has
+  // to go. The obvious guard is `if (already) return false`, and it was wrong,
+  // because the flag has exactly one clearing path (teardown) and teardown has
+  // exactly one caller (a connected port's `onDisconnect`). A paint that never
+  // gets a port therefore sets the flag FOREVER.
+  //
+  // That is reachable: `state/page.ts#decorateQuestions` injects, awaits, and
+  // only then calls `chrome.tabs.connect`. If the panel is destroyed during
+  // that round trip, or the connect throws, the marks are already painted and
+  // no port ever arrives. Every later re-caddy then re-stamps the fields with
+  // fresh tokens, hits this guard, paints nothing — and leaves the ORIGINAL
+  // marks on screen, still tracking their fields, still clickable, posting
+  // tokens that no longer resolve. The panel answers every click with "that
+  // question is no longer on the page", which is a lie, and the only exit is
+  // reloading the tab.
+  //
+  // Repainting is idempotent and strictly more correct, so there is no reason
+  // to prefer the bail. It also makes the re-caddy ordering in
+  // `state/answer-desk.ts#scan` moot: that path disconnects the port and does
+  // not await the page-side teardown, so this call could otherwise race it.
+  if (win.__ccGolfTeardown) win.__ccGolfTeardown();
 
   // Smallest and largest the mark may be drawn, and how far in from the
   // field's top-right corner. KeePassXC's clamp, with their height-derived

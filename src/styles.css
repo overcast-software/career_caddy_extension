@@ -1271,6 +1271,45 @@ h1 {
    left for the designer. */
 .qc { margin-bottom: 12px; }
 
+/* ── Restatements: borders that carry MEANING, not just an edge ───────────
+   The shared rule above is later in the sheet than these components and uses
+   the `border` SHORTHAND, so it silently flattened three signals. Caught in
+   architectural review; restated here rather than by reordering, so the whole
+   surface pass stays one revertible block.
+
+   .lo and .ma were --accent-500 on purpose: "An offer, never an adoption. The
+   accent border says 'this needs an answer' without the alarm of an error
+   colour." Reduced to the same hairline as every other card, a ladder offer
+   stopped asking for anything.
+
+   .lo--tentative is the worse half. It sets border-COLOR and border-STYLE as
+   longhands; a later shorthand resets both, so the dashed tentative offer
+   became pixel-identical to the confident one. `tentativeClass` still computed
+   it and the rule was still in the sheet — the T6 "we only know you were
+   looking at this" distinction was deleted while looking fully alive. */
+.lo,
+.ma {
+  border-color: var(--accent-500);
+}
+.lo--tentative {
+  border-color: var(--border-strong);
+  border-style: dashed;
+}
+
+/* Hover feedback that the card surface swallowed. `.qp__pick` has `border: 0`
+   and hovered to --bg-soft, which IS the card colour now — so the question
+   list, the panel's primary way of choosing anything, lost its only pointer
+   affordance entirely. --bg-input reads against the card in all twelve
+   theme x palette combinations.
+
+   The sibling controls that also sit --bg-soft-on---bg-soft (.qc__copy,
+   .qc__open, .ae__choice, .ae__chip) keep their borders so they do not
+   disappear, and are left for the designer — losing fill separation is a
+   judgement call, losing hover entirely is not. */
+.qp__pick:hover {
+  background: var(--bg-input);
+}
+
 /* ── Skeletons ────────────────────────────────────────────────────────────
    Ported from the popup, which is the one place these existed. The shimmer
    runs between --bg-soft and --border, so it themes across all twelve
@@ -1318,8 +1357,14 @@ h1 {
 }
 
 /* Respect the user's motion preference. The popup predates this being routine
-   and shipped both animations unconditionally; a shimmer and a spin are
-   exactly the repetitive motion the media query exists for. */
+   and shipped both animations unconditionally.
+
+   The two are treated DIFFERENTLY on purpose, and an earlier version of this
+   comment claimed both were "dropped", which was wrong. The shimmer is pure
+   decoration on a placeholder, so it stops outright. The spinner is the only
+   thing saying work is in progress — a frozen spinner reads as a hung app,
+   which is worse for the user this query is protecting — so it slows rather
+   than stopping. */
 @media (prefers-reduced-motion: reduce) {
   .skel { animation: none; background: var(--bg-soft); }
   .spinner { animation-duration: 2.4s; }
