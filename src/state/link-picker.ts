@@ -56,6 +56,22 @@ class LinkPickerState {
   private ticket = 0;
   private debounceTimer: number | null = null;
 
+  /**
+   * Can this page be linked to anything at all?
+   *
+   * The same predicate `link()` enforces, so the UI agrees with the behaviour
+   * instead of offering an action guaranteed to refuse. On Career Caddy itself
+   * there is nothing to link — the page IS the library — and the same is true
+   * of `chrome://`, `file://` and private hosts.
+   *
+   * Hidden rather than disabled-with-a-reason: SendCard already says "You're
+   * on Career Caddy itself" right above this, and repeating it in a second
+   * card reads as two problems instead of one fact.
+   */
+  get canLink(): boolean {
+    return classifyUrl(page.url).ok;
+  }
+
   /** Debounce, so typing "software engineer" is one search and not seventeen. */
   search(query: string): void {
     this.query = query;
@@ -145,6 +161,12 @@ class LinkPickerState {
     // Adopt the post we just linked, so the panel immediately shows what it
     // knows about this page rather than making the user reload to see it.
     trackedPost.adopt({ ...post, applyUrl: url });
+  }
+
+  /** Drop an armed overwrite-confirm without disturbing the results. */
+  disarm(): void {
+    this.pendingOverwriteId = null;
+    if (this.statusIsError) this.status = '';
   }
 
   reset(): void {

@@ -42,6 +42,7 @@ export default class LinkCard extends Component {
   };
 
   <template>
+    {{#if this.picker.canLink}}
     <details class="lp" {{on "toggle" this.onToggle}}>
       <summary class="lp__summary">Link this page to a job post</summary>
 
@@ -95,6 +96,7 @@ export default class LinkCard extends Component {
         </ul>
       {{/if}}
     </details>
+    {{/if}}
   </template>
 }
 

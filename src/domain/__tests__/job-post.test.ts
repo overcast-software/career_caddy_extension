@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toJobPost, wouldReplaceApplyUrl } from './job-post.ts';
+import { toJobPost, wouldReplaceApplyUrl } from '../job-post.ts';
 
 describe('toJobPost', () => {
   it('resolves the company from the sideload by (type, id)', () => {

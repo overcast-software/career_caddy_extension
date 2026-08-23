@@ -18,6 +18,7 @@ import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
+import { linkPicker } from '../state/link-picker.ts';
 import { theme } from '../state/theme.ts';
 
 /**
@@ -71,6 +72,11 @@ export default class Workbench extends Component {
       // A score run belongs to the post it was started on. Carrying its
       // state to the next page would narrate someone else's scoring.
       scoreRunner.reset();
+      // An armed overwrite-confirm belongs to the page it was armed on. The
+      // panel outlives navigation, so without this the second click could
+      // land after a tab change and replace an apply link with a DIFFERENT
+      // page's URL — the confirm protecting the wrong thing entirely.
+      linkPicker.disarm();
     });
     access.listen();
     void access.refresh();
