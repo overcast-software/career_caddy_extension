@@ -13,8 +13,8 @@
     "gate": "node scripts/csp-gate.mjs",
     "gate:injected": "node scripts/injected-gate.mjs",
     "gate:layering": "node scripts/layering-gate.mjs",
-    "lint:firefox": "web-ext lint --source-dir dist/firefox",
-    "package:firefox": "npm run build:firefox && web-ext build --source-dir dist/firefox --artifacts-dir web-ext-artifacts --overwrite-dest",
+    "lint:firefox": "npm run build && web-ext lint --source-dir dist/firefox",
+    "package:firefox": "npm run build && web-ext build --source-dir dist/firefox --artifacts-dir web-ext-artifacts --overwrite-dest",
     "test": "vitest run",
     "test:watch": "vitest"
   },

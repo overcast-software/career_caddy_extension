@@ -20,9 +20,15 @@ if (!root) {
     // which is indistinguishable from "the extension didn't load" and sends
     // you looking in entirely the wrong place. Ask me how I know.
     console.error('[cc] panel failed to render', error);
-    root.innerHTML =
-      '<p style="font:12px system-ui;padding:12px">' +
-      'The panel failed to render. Open DevTools on this panel for the error.' +
-      '</p>';
+    // Built with DOM calls rather than innerHTML. The string was static and
+    // safe, but store reviewers grep for innerHTML and a hit costs a round of
+    // correspondence to explain — cheaper to not have one. The only
+    // innerHTML-adjacent calls left in the bundle are Glimmer's own
+    // insertAdjacentHTML, which is vendor code on a path we never take.
+    const notice = document.createElement('p');
+    notice.style.cssText = 'font:12px system-ui;padding:12px';
+    notice.textContent =
+      'The panel failed to render. Open DevTools on this panel for the error.';
+    root.replaceChildren(notice);
   }
 }
