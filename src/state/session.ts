@@ -23,6 +23,7 @@ export const KEYS = {
   me: 'ccMe',
   meCache: 'ccMeCache',
   matchApps: 'ccMatchApps',
+  trackedPages: 'ccTrackedPages',
 } as const;
 
 /**
@@ -43,7 +44,7 @@ export const USER_SCOPED_STORAGE_KEYS: readonly string[] = [
   KEYS.me,
   KEYS.meCache,
   'ccExtensionSelectorCache',
-  'ccTrackedPages',
+  KEYS.trackedPages,
   'ccSentPages',
   KEYS.matchApps,
   'ccAnswerDrafts',

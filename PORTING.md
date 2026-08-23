@@ -95,6 +95,19 @@ Note `handleEnrich` is a **no-op stub that reports success** in the legacy too
 (CCEXT-11). Port the honest version or omit it; do not port the lie.
 
 ### Page stash / viewed posts — 10 functions
+
+**VERDICTS RECORDED (CCEXT-52, partial):**
+
+- `stashTrackedPage` / `readPageStash` / `writePageStash` — **PORT**, done, in
+  `state/tracked.ts`. My early guess that these were popup scaffolding was
+  WRONG, and measurably so: accepting a ladder offer says "this form belongs
+  to that post", nothing about the URL changes when you say it, so the next
+  `refresh()` overwrote the answer with 'none'. Verified on a
+  jobs.ashbyhq.com form — one step through the application and the adoption
+  was gone. The panel does not remove this need; only persistence does.
+- `removePageStash` — **DROP (superseded)**: entries expire on a 7-day TTL and
+  are capped at 50. An explicit remove had no caller once adoption became the
+  only writer.
 `readPageStash` `writePageStash` `removePageStash` `stashTrackedPage`
 `pushViewedPost` `loadViewedPosts` `importPaletteFromActiveTab`
 `readSpaSession` `grabPageExcerpt` `pickPageTitle`
