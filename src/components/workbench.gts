@@ -5,6 +5,7 @@ import { on } from '@ember/modifier';
 import DraftBox from './draft-box.gts';
 import PermissionProbe from './permission-probe.gts';
 import ErrorLog from './error-log.gts';
+import DevHints from './dev-hints.gts';
 import SectionSet from './section-set.gts';
 import Segmented from './segmented.gts';
 import Section from './section.gts';
@@ -230,6 +231,7 @@ export default class Workbench extends Component {
           Panel alive for <strong>{{this.uptimeLabel}}</strong>
         </p>
         <ErrorLog />
+        <DevHints />
         <PermissionProbe />
       </Section>
   </template>

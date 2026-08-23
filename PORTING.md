@@ -108,7 +108,29 @@ Notices you followed an apply link from a known post to an ATS, and offers to
 backfill the post's `apply_url` with where you actually landed. Explains why
 only 3 of the 100 most recent posts have an `apply_url` at all.
 
-### Staff / proposed post / dev-hints — 10 functions
+### Staff / proposed post / dev-hints — 10 functions (CCEXT-49, **PARTIAL**)
+
+**Done:** `populateDevHints` ✅ + `_setDevHint` ✅ + `profileLookupNote` ✅ —
+`components/dev-hints.gts` and `domain/profile-note.ts` (5 tests).
+
+`profileLookupNote` is the valuable half and it is pure, so it is tested. It
+refuses to collapse three different outcomes into "no profile": a genuine 404
+(confirmed absent, actionable — go author one), a THROTTLE or outage (not an
+absence at all — wait), and a profile that EXISTS with empty selector arrays.
+That last one is jobright.ai, and finding it took a curl against prod because
+the panel had no way to say it.
+
+Read on demand, not per navigation — it costs a scripting call, and the
+standing rule is no extra page reads for convenience.
+
+**Remaining:** `renderProposedPost` `createFromProposed` `handleEnrich`
+`pushEnrichTrace` `handleRecheck` `resolveProfileId` `refreshStaffFlag`
+(`refreshStaffFlag` is effectively covered by `state/me.ts`'s `isStaff`).
+
+⚠ `handleEnrich` is a **no-op stub that reports success** in the legacy too
+(CCEXT-11). Port the honest version or omit it; do not port the lie.
+
+**Original notes:**
 `renderProposedPost` `createFromProposed` `populateDevHints` `_setDevHint`
 `handleEnrich` `pushEnrichTrace` `handleRecheck` `profileLookupNote`
 `resolveProfileId` `refreshStaffFlag`
