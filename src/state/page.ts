@@ -3,6 +3,7 @@ import { ccGrabPayload, ccCountUnreachableFrames } from '../injected/grab-payloa
 import type { PagePayload } from '../injected/grab-payload.ts';
 import { ccGrabHints } from '../injected/grab-hints.ts';
 import { ccGrabLadderSignals } from '../injected/grab-ladder-signals.ts';
+import { ccGrabExcerpt } from '../injected/grab-excerpt.ts';
 import type { LadderSignals } from '../injected/grab-ladder-signals.ts';
 import type { HintSelectors, RawHints } from '../injected/grab-hints.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
@@ -219,6 +220,30 @@ class PageState {
       return (hit?.result as LadderSignals) ?? empty;
     } catch {
       return empty;
+    }
+  }
+
+  /**
+   * The top frame's visible text, for the CC-135 match context.
+   *
+   * TOP FRAME ONLY, and deliberately NOT capture(). The excerpt is a matching
+   * HINT, not the multi-frame capture the send path needs — capture() joins
+   * every reachable frame, which is heavier than the matcher wants and mixes
+   * in embedded-widget text that makes the page harder to identify, not
+   * easier. The legacy split these for exactly that reason and I had
+   * collapsed them.
+   */
+  async grabExcerpt(max: number): Promise<string> {
+    if (this.tabId === undefined) return '';
+    try {
+      const [hit] = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId },
+        func: ccGrabExcerpt,
+      });
+      const text = hit?.result;
+      return typeof text === 'string' ? text.slice(0, max) : '';
+    } catch {
+      return '';
     }
   }
 

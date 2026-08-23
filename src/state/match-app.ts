@@ -31,6 +31,14 @@ const STASH_MAX = 10;
 const POLL_INTERVAL_MS = 2500;
 /** ~60s of panel-side polling before the stash takes over. */
 const POLL_MAX = 24;
+/**
+ * 8000, matching the server's MATCH_TEXT_EXCERPT_MAX
+ * (models/job_application.py:41) — which TRUNCATES anything longer. Sending
+ * more is wasted bytes; sending the 2000 I originally hardcoded threw away
+ * three quarters of the context the matcher is allowed to see, on the tier
+ * that most needs it.
+ */
+const EXCERPT_MAX = 8000;
 
 export type MatchState = 'idle' | 'creating' | 'matching' | 'matched' | 'nomatch' | 'error';
 
@@ -107,17 +115,15 @@ class MatchAppRunner {
     // block it, because the application still needs to exist either way.
     const signals = await page.grabLadderSignals();
     if (stale()) return;
-    const captured = await page.capture();
+    // Top-frame excerpt, not a full capture — see page.grabExcerpt.
+    const excerpt = await page.grabExcerpt(EXCERPT_MAX);
     if (stale()) return;
 
     const created = await createMatchApplication(apiKey, {
       trackingUrl: url,
       referrer: signals.referrer ?? '',
       pageTitle: signals.ogTitle || signals.h1 || page.title || '',
-      // A bounded excerpt, not the page. The matcher needs enough to identify
-      // a posting, and shipping the whole DOM would be both slower and a
-      // larger disclosure than the task needs.
-      excerpt: (captured?.text ?? '').slice(0, 2000),
+      excerpt,
     });
     if (stale()) return;
 

@@ -14,6 +14,7 @@ import {
 import { page } from './page.ts';
 import { session } from './session.ts';
 import { trackedPost } from './tracked.ts';
+import { loadViewed } from './viewed.ts';
 
 /**
  * Which job post does THIS page belong to, when its URL matches nothing?
@@ -188,14 +189,9 @@ class LadderRunner {
       }
 
       // --- T6: the recently-viewed trail — TENTATIVE ----------------------
-      // BLOCKED ON CCEXT-52. The trail comes from loadViewedPosts(), which is
-      // in the page-stash cluster still awaiting a port/drop verdict. The
-      // pure rule (pickFromTrail, cross-origin only) is written and tested;
-      // it simply has no data source yet.
-      //
-      // The consequence is bounded and honest: T6 never fires, so the ladder
-      // says "no match" where it would have offered a guess. That is the
-      // right way to be incomplete — no wrong answers, just fewer answers.
+      // Live as of the CCEXT-52 triage. The trail is state/viewed.ts; the
+      // rule that reads it (pickFromTrail — CROSS-ORIGIN ONLY, per the Toptal
+      // single-origin-portal misfire) is in domain/ladder.ts and tested.
       const trail = await this.viewedTrail();
       if (stale()) return;
       if (trail.length) {
@@ -275,9 +271,9 @@ class LadderRunner {
     return out;
   }
 
-  /** Seam for T6. Empty until CCEXT-52 decides the viewed-trail's fate. */
+  /** T6's data: recently-viewed posts, newest first, TTL-filtered on read. */
   private async viewedTrail(): Promise<JobPost[]> {
-    return [];
+    return loadViewed();
   }
 }
 

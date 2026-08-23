@@ -6,6 +6,7 @@ import type { JobPost, JobPostAttrs } from '../domain/job-post.ts';
 import { classifyUrl } from '../domain/url-policy.ts';
 import { page } from './page.ts';
 import { session, KEYS } from './session.ts';
+import { rememberViewed } from './viewed.ts';
 
 /**
  * "Do we already know this posting?"
@@ -141,6 +142,9 @@ class TrackedState {
 
     this.post = toJobPost(item, resp.data.included ?? []);
     this.state = 'found';
+    // CC-138 T6: remember it, so a later apply-page miss can offer it from
+    // the trail. Fire-and-forget — the trail is a hint, never a dependency.
+    rememberViewed(this.post);
   }
 
   /**
@@ -154,6 +158,7 @@ class TrackedState {
     this.ticket++;
     this.post = post;
     this.state = 'found';
+    rememberViewed(post);
     // Remember it against THIS url, so the next refresh does not undo a
     // decision the user just made. The api cannot know about this link —
     // that is the whole reason they had to tell us.

@@ -94,40 +94,38 @@ only 3 of the 100 most recent posts have an `apply_url` at all.
 Note `handleEnrich` is a **no-op stub that reports success** in the legacy too
 (CCEXT-11). Port the honest version or omit it; do not port the lie.
 
-### Page stash / viewed posts — 10 functions
+### Page stash / viewed posts — 10 functions (CCEXT-52, **TRIAGE COMPLETE**)
 
-**VERDICTS RECORDED (CCEXT-52, partial):**
+Every function has a verdict. My opening guess — that this cluster was popup
+scaffolding kept alive only because the popup died on blur — was **wrong for
+seven of the ten**. The panel removes the need to survive being DESTROYED. It
+does not remove the need to remember something the user did minutes ago, and
+that is what most of this cluster is actually for.
 
-- `stashTrackedPage` / `readPageStash` / `writePageStash` — **PORT**, done, in
-  `state/tracked.ts`. My early guess that these were popup scaffolding was
-  WRONG, and measurably so: accepting a ladder offer says "this form belongs
-  to that post", nothing about the URL changes when you say it, so the next
-  `refresh()` overwrote the answer with 'none'. Verified on a
-  jobs.ashbyhq.com form — one step through the application and the adoption
-  was gone. The panel does not remove this need; only persistence does.
-- `removePageStash` — **DROP (superseded)**: entries expire on a 7-day TTL and
-  are capped at 50. An explicit remove had no caller once adoption became the
-  only writer.
-`readPageStash` `writePageStash` `removePageStash` `stashTrackedPage`
-`pushViewedPost` `loadViewedPosts` `importPaletteFromActiveTab`
-`readSpaSession` `grabPageExcerpt` `pickPageTitle`
-
-Some of this is genuinely obsolete: the stash existed so a popup that dies on
-blur could remember across a re-open. A panel does not need it. **Decide per
-function whether the panel makes it unnecessary — and record the decision, so
-"dropped deliberately" stays distinguishable from "forgotten".**
-
-## Tickets
-
-| Subsystem | Ticket | Functions |
+| Function | Verdict | Reason |
 |---|---|---|
-| Signal ladder / match application | **CCEXT-50** | 22 |
-| Apply attribution | **CCEXT-51** | 9 |
-| Page stash / viewed posts (triage) | **CCEXT-52** | 10 |
-| Answer desk | CCEXT-45 | 20 |
-| Staff / proposed / dev-hints | CCEXT-49 | 10 |
+| `readPageStash` | **PORT** ✅ | in `state/tracked.ts` |
+| `writePageStash` | **PORT** ✅ | in `state/tracked.ts` |
+| `stashTrackedPage` | **PORT** ✅ | Proven by failure: accepting a ladder offer says "this form belongs to that post", nothing about the URL changes, so the next `refresh()` overwrote it with `none`. One step through an Ashby form lost the adoption. |
+| `removePageStash` | **DROP (superseded)** | The 7-day TTL and the 50-entry cap leave it with no caller once adoption is the only writer. |
+| `pickPageTitle` | **PORT** ✅ | in `domain/ladder.ts`, unit-tested — T5's og:title-vs-h1 rule. |
+| `readSpaSession` | **PORT** ✅ | already in `state/session.ts:239`, same shape: scans ALL tabs for a Career Caddy tab, not just the active one. Connecting must not require standing on the app. |
+| `pushViewedPost` | **PORT** ✅ | `state/viewed.ts`. Recorded whenever a post becomes this page's, by lookup or adoption. |
+| `loadViewedPosts` | **PORT** ✅ | `state/viewed.ts`. **This unblocked T6**, which had been a seam returning `[]`. |
+| `grabPageExcerpt` | **PORT** ✅ | `injected/grab-excerpt.ts` — and porting it CORRECTED my code (see below). |
+| `importPaletteFromActiveTab` | **PORT — deferred** | Genuine feature, not scaffolding: syncs the web app's colour palette so the two surfaces match. Deliberately does NOT import light/dark mode — the panel's own toggle stays authoritative, so a site-side switch cannot override the user's choice. Not urgent; the panel already themes itself. |
 
-Epic: **CCEXT-43**.
+**The excerpt was the useful find.** `state/match-app.ts` was calling
+`page.capture()` — the full multi-frame send capture — and slicing it to 2000
+chars for the CC-135 match context. Two things wrong, both fixed:
+
+- **Top frame only.** The legacy split these deliberately: the excerpt is a
+  matching *hint*, and joining every reachable frame mixes in embedded-widget
+  text that makes a page harder to identify, not easier.
+- **8000, not 2000.** That is the server's `MATCH_TEXT_EXCERPT_MAX`
+  (`models/job_application.py:41`), which truncates anything longer. My 2000
+  threw away three quarters of the context the matcher is allowed to see — on
+  the tier that most needs it.
 
 ## How to work this list
 
