@@ -13,7 +13,9 @@
     "lint:firefox": "web-ext lint --source-dir dist/firefox",
     "package:firefox": "npm run build:firefox && web-ext build --source-dir dist/firefox --artifacts-dir web-ext-artifacts --overwrite-dest",
     "bump": "node scripts/bump-build.mjs",
-    "gate:injected": "node scripts/injected-gate.mjs"
+    "gate:injected": "node scripts/injected-gate.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@glimmer/component": "^2.1.1",
@@ -31,6 +33,7 @@
     "decorator-transforms": "^2.4.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.6",
+    "vitest": "^4.1.11",
     "web-ext": "^10.6.0"
   }
 }

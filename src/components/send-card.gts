@@ -6,6 +6,7 @@ import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
+import { planSend } from '../domain/send-gate.ts';
 
 /**
  * "Send this page" — the extension's most-used action.
@@ -161,21 +162,22 @@ export default class SendCard extends Component {
     }
 
     this.status = 'Sending to Career Caddy…';
-    // from-text is one of the api's deliberately RPC-shaped endpoints: plain
-    // JSON, not JSON:API. `plainJson` is how that is stated rather than
-    // discovered.
+
+    // CC-176 lives in domain/send-gate.ts, pure and testable. The rule it
+    // encodes: captured text ALWAYS goes extension-direct, because
+    // /scrapes/from-text/ creates a browser-tier scrape that waits for a
+    // Camoufox runner — and on an auth-walled posting that runner can never
+    // load the logged-in page, so the scrape hangs forever with no JobPost.
+    const decision = planSend(payload, {}, { autoScore: this.autoScore });
+    console.debug('[cc] send gate', decision);
+
     const resp = await request<{ data?: { id?: string }; id?: string }>(
-      '/api/v1/scrapes/from-text/',
+      decision.plan.path,
       {
         method: 'POST',
-        plainJson: true,
+        plainJson: decision.plan.plainJson,
         token: session.apiKey,
-        body: {
-          text: payload.text,
-          link: payload.url,
-          source: 'extension',
-          auto_score: this.autoScore,
-        },
+        body: decision.plan.body,
       },
     );
 
@@ -188,8 +190,12 @@ export default class SendCard extends Component {
     this.scrapeId = String(resp.data?.data?.id ?? resp.data?.id ?? '') || null;
     this.kind = 'ok';
     const from = payload.frames > 1 ? ` from ${payload.frames} frames` : '';
+    // Naming the path matters while the fast path is new: "browser tier" is
+    // the one that can hang on an auth-walled page, and seeing it in the
+    // status is how you catch the gate choosing wrong.
+    const via = decision.plan.kind === 'extension-direct' ? '' : ' via the browser tier';
     this.status =
-      `Sent ${chars.toLocaleString()} characters${from}. ` +
+      `Sent ${chars.toLocaleString()} characters${from}${via}. ` +
       (this.autoScore ? 'Parsing and scoring it.' : 'Parsing it.');
   }
 

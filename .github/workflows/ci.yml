@@ -56,6 +56,11 @@ jobs:
       # EXPECTED and unfixable here: they are inside ember-source's Glimmer
       # runtime (its SafeString path), not our code, and tree-shaking cannot
       # drop them because the path is reachable in principle. See RELEASING.md.
+      # src/domain/ only — no chrome, no DOM, no network. If a test here ever
+      # needs an environment, that is the signal the module escaped domain/.
+      - name: Unit tests (domain)
+        run: npm test
+
       - name: web-ext lint (Firefox)
         run: npx web-ext lint --source-dir dist/firefox
 
