@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { FRONTEND_ORIGIN } from '../lib/api.ts';
 import { application } from '../state/application.ts';
 import { trackedPost } from '../state/tracked.ts';
+import { ladder } from '../state/ladder.ts';
 
 /**
  * Track an application against the job post matched to this page.
@@ -24,6 +25,18 @@ export default class ApplicationCard extends Component {
 
   get tracked(): typeof trackedPost {
     return trackedPost;
+  }
+
+  /**
+   * An unanswered offer is not the same as "nothing here".
+   *
+   * The empty state tells you to go and send the page. While an offer is on
+   * screen that instruction is wrong AND contradicts the card directly above
+   * it, which is naming a post. The offer is the shorter path, so the empty
+   * state waits until it has been answered.
+   */
+  get showEmpty(): boolean {
+    return !trackedPost.isKnown && !ladder.hasOffer;
   }
 
   get postUrl(): string {
@@ -92,7 +105,7 @@ export default class ApplicationCard extends Component {
           </a>
         {{/if}}
       </div>
-    {{else}}
+    {{else if this.showEmpty}}
       <p class="ac__empty">
         No job post is linked to this page yet. Send it from
         <strong>This page</strong> first — then track your application here.

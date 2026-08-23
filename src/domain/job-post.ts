@@ -79,6 +79,26 @@ export function toJobPost(
 }
 
 /**
+ * Find a job post in a JSON:API `included` array and map it.
+ *
+ * The legacy carried a second mapper (`buildJpFromIncluded`) for this, which
+ * is how the by-link lookup and the match result could disagree about the same
+ * row. Same mapping, one lookup in front of it — so there is one definition of
+ * what a JobPost is, not three.
+ */
+export function jobPostFromIncluded(
+  jobPostId: string,
+  included: JsonApiResource[],
+): JobPost | null {
+  const jp = included.find(
+    (r) =>
+      (r.type === 'job-post' || r.type === 'job-posts') &&
+      String(r.id) === String(jobPostId),
+  );
+  return jp ? toJobPost(jp as JsonApiResource<JobPostAttrs>, included) : null;
+}
+
+/**
  * Would linking this page to `post` destroy an apply link it already has?
  *
  * Pulled out of the click handler and given a name because it is the one
