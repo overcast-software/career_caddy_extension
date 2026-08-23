@@ -64,38 +64,65 @@ only. The highest-volume route gains nothing from either.
 
 ---
 
-## ⛔ GAP 0 — the Send button is staff-gated, and the gate is over-broad
+## ⚠ GAP 0 — the staff gate, and what a Send actually costs the operator
 
 `POST /api/v1/scrapes/` returns **403 "Scraping is staff-only during alpha."**
 for any non-staff user (`views/scrapes.py:364-368`). That is the extension's
-primary button. It works today only because Doug is staff.
+primary button, and it works today only because Doug is staff.
 
-**The gate is in the wrong place, and Doug's rationale is why.** Scraping is
-staff-only *because the browser tier needs a headed browser* — an operator
-resource that costs a machine, a session, and a captcha solve. Regular users
-are meant to use **the Send button instead**, precisely because it needs none
-of that: the user's own browser already did the capture.
+**The rationale, from Doug — recorded because I first got it wrong.** The gate
+is not about a headed browser being an expensive resource. It is that
+**scraping is fraught and can break terms of service**, and that a user-created
+scrape becomes **a job the operator's automation has to run**. It is a
+liability-and-workload gate, not a capacity one.
 
-But the gate cannot tell the two apart. It fires at **line 364**; `source_mode`
-is not read until **line 387**. It gates the endpoint, not the capability.
+So the question is not "does this need a browser" but **"does a Send create
+work for the operator, or expose them to ToS risk?"** Reviewed below.
 
-| | needs a headed browser | currently gated |
-|---|---|---|
-| browser tier (`status='hold'` → `claim_next` → runner) | **yes** | yes ✅ |
-| extension-direct (capture already done client-side) | **no** | yes ❌ |
+### What a Send actually does — verified, not assumed
 
-**Verdict: API GAP — the highest-priority one in this document.** It blocks
-every non-staff user from the feature they are supposed to use, and it blocks
-them from the *only* path that does not consume operator resources.
+| Question | Answer |
+|---|---|
+| Is a Scrape row created at send time? | **Yes.** `Scrape.objects.create(...)` at `scrapes.py:587`, initially **`status='hold'`**, logged as such at `:589`. |
+| What is in the payload? | **`document.body.innerText` and nothing else** (`injected/grab-payload.ts:32`). No HTML, no DOM, no outerHTML. The server never receives markup from this path. |
+| Does the runner pick it up? | **Normally no.** `_consume_extension_direct_payload` fires at `:620` and moves the row to `completed` (`:768`) or `pending` (`:856`) synchronously, in the request. `claim_next` filters `status="hold"` (`:1447`), so neither terminal state is claimable. |
+| Does anything get enqueued? | **Only on a Tier-0 miss**: `enqueue("parse_scrape", ...)` at `:872` — an api-side django-q2 LLM parse. That costs tokens on the api, **not** a browser session on the runner. |
 
-**Fix:** move the staff check below the `source_mode` determination and apply
-it only when the request would enqueue browser work. Extension-direct becomes
-`IsAuthenticated` like `/from-text/` already is (`views/base.py:34`) — note
-that inconsistency is itself evidence: the text-paste route, which also needs
-no browser, is already open to everyone.
+### ⚠ But there IS an unguarded window, and it is worth knowing about
 
-**Do not fix this in the client by hiding Send behind `me.isStaff`.** That
-would make the button correct and the product wrong.
+**`create()` is not transaction-wrapped** — no `@transaction.atomic` on
+`scrapes.py:359`. So the row is committed at `status='hold'` on line 587 and
+only leaves that state at line 620+.
+
+Between those, the row is **visible to `claim_next` and claimable by a
+runner**. If a runner polls in that window it sets `status='running'` and the
+graph will go and browse the URL — which is exactly the outcome the gate
+exists to prevent.
+
+The window is milliseconds and the probability is low. But it is not zero, and
+it is the only path by which a Send can become browser work. **Wrapping
+`create()` in `transaction.atomic` — or creating the row directly in its
+terminal state for extension-direct — closes it, and would make "a Send never
+becomes a runner job" a guarantee rather than a race.**
+
+### The ToS question — stated, not decided
+
+The extension reads text from a page the user has already loaded, in their own
+browser, under their own session. That is a different act from a headless
+fetcher retrieving a page the user never visited. Whether that difference is
+sufficient for the ToS concern is **Doug's call, not a technical finding**, and
+this document does not assume it.
+
+**Verdict: OPEN — a product decision, with the technical facts above.** Two
+things follow regardless of how it is decided:
+
+1. **If the gate is meant to stay for extension-direct**, the extension must
+   check `me.isStaff` before offering Send and say why. Right now a non-staff
+   user gets a bare 403 (and, until v2.0.58, a stack overflow).
+2. **If extension-direct is meant to be open**, the gate needs to move below
+   the `source_mode` read — it currently fires at `:364`, before `source_mode`
+   is known at `:387`, so it cannot distinguish the two capabilities. The race
+   window above should be closed in the same change.
 
 ---
 
