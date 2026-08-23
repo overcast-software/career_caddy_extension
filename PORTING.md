@@ -50,6 +50,17 @@ aggregated scoring. CCEXT-32 proposes aggregation and is still Todo — a
 proposal, not shipped behaviour. Building from the ticket instead of the
 source would have produced a system that never existed, labelled a port.
 
+**Done — orchestration + UI:**
+`runSignalLadder` ✅ (`state/ladder.ts`, T1–T5 live, T6 seam)
+`grabLadderSignals` ✅ (`injected/grab-ladder-signals.ts`, injected-gate covers it)
+`maybeOfferFromLadder` ✅ `renderLadderOffer` ✅ `confirmLadderOffer` ✅
+(`components/ladder-offer.gts`)
+
+**T6 blocked on CCEXT-52** — the viewed-post trail has no data source until
+that triage lands. `pickFromTrail` is written and tested; the seam returns [].
+Bounded and honest: T6 never fires, so the ladder says "no match" where it
+would have guessed. Fewer answers, no wrong ones.
+
 **Remaining:**
 `runSignalLadder` `grabLadderSignals` `maybeOfferFromLadder`
 `renderLadderOffer` `confirmLadderOffer` `postMatchApplication`

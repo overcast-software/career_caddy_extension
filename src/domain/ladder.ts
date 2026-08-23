@@ -143,7 +143,16 @@ export function titlesMatch(a: string | null | undefined, b: string | null | und
   return shared / denom >= 0.8;
 }
 
-/** The subset of a JobPost the evidence rules actually look at. */
+/**
+ * The subset of a JobPost the evidence rules actually look at.
+ *
+ * The verifiers below are generic over `T extends Candidate` rather than
+ * taking `Candidate` directly, so they hand BACK whatever they were given. A
+ * caller passing full JobPosts gets full JobPosts out; the rules still only
+ * read these four fields. Taking `Candidate` flatly would silently narrow the
+ * result and force a cast at every call site — which is a cast that can be
+ * wrong, whereas this cannot.
+ */
 export interface Candidate {
   id: string;
   title?: string | null;
@@ -199,11 +208,11 @@ export function pickPageTitle(
  * has not identified anything, and picking one would be a coin flip presented
  * as a fact.
  */
-export function verifyByToken(
-  rows: Candidate[],
+export function verifyByToken<T extends Candidate>(
+  rows: T[],
   token: string,
   constraintHost: string | null,
-): Candidate | null {
+): T | null {
   const verified = rows.filter(
     (r) => r && r.id && r.link && r.link.includes(token) && hostAgrees(r, constraintHost),
   );
@@ -211,11 +220,11 @@ export function verifyByToken(
 }
 
 /** T5 verification. Same exactly-one rule, for the same reason. */
-export function verifyByTitle(
-  rows: Candidate[],
+export function verifyByTitle<T extends Candidate>(
+  rows: T[],
   pageTitle: string,
   constraintHost: string | null,
-): Candidate | null {
+): T | null {
   const matches = rows.filter(
     (r) => r && r.id && titlesMatch(r.title, pageTitle) && hostAgrees(r, constraintHost),
   );
@@ -238,11 +247,11 @@ export function verifyByTitle(
  * Always TENTATIVE. T6 is a suggestion from circumstantial evidence and must
  * be confirmed by a human before anything is written.
  */
-export function pickFromTrail(
-  viewed: Candidate[],
+export function pickFromTrail<T extends Candidate>(
+  viewed: T[],
   tabUrl: string,
   constraintHost: string | null,
-): Candidate | null {
+): T | null {
   const tabHost = bareHost(tabUrl);
   const crossOrigin = viewed.filter((v) => bareHost(v.link) !== tabHost);
   if (!crossOrigin.length) return null;

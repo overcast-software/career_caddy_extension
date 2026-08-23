@@ -42,6 +42,30 @@ export async function searchPosts(
 }
 
 /**
+ * Is there a post with exactly this link?
+ *
+ * The ladder's T1/T2/T3 all ask this about a URL that is NOT the current page
+ * — an opener tab, another open tab, a referrer — which is why it lives here
+ * rather than staying inline in state/tracked.ts, where it only ever asked
+ * about `page.url`.
+ */
+export async function lookupByLink(
+  apiKey: string,
+  url: string,
+): Promise<JobPost | null> {
+  const path =
+    `/api/v1/job-posts/?filter%5Blink%5D=${encodeURIComponent(url)}` +
+    `&include=company&page%5Bsize%5D=1`;
+  const resp = await request<JsonApiListDoc<JobPostAttrs>>(path, {
+    token: apiKey,
+    timeoutMs: 8000,
+  });
+  if (!resp.ok) return null;
+  const item = resp.data?.data?.[0];
+  return item ? toJobPost(item, resp.data?.included ?? []) : null;
+}
+
+/**
  * Point an existing post at this page as its apply URL.
  *
  * Returns whether the SERVER took it. The caller must not report success on

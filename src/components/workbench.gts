@@ -14,6 +14,7 @@ import TrackedCard from './tracked-card.gts';
 import LinkCard from './link-card.gts';
 import QuickCopyCard from './quick-copy-card.gts';
 import ApplicationCard from './application-card.gts';
+import LadderOffer from './ladder-offer.gts';
 import AccessGate from './access-gate.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
@@ -24,6 +25,7 @@ import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
 import { linkPicker } from '../state/link-picker.ts';
 import { me } from '../state/me.ts';
+import { ladder } from '../state/ladder.ts';
 import { theme } from '../state/theme.ts';
 
 /**
@@ -82,7 +84,9 @@ export default class Workbench extends Component {
       void access.refresh();
       // "Do we already know this page?" is asked on every navigation, not
       // once at open — a panel outlives many pages.
-      void trackedPost.refresh();
+      // The ladder only runs when the by-link lookup came back empty, so it
+      // is chained behind it rather than raced against it.
+      void trackedPost.refresh().then(() => ladder.run());
       // A score run belongs to the post it was started on. Carrying its
       // state to the next page would narrate someone else's scoring.
       scoreRunner.reset();
@@ -94,7 +98,7 @@ export default class Workbench extends Component {
     });
     access.listen();
     void access.refresh();
-    void trackedPost.refresh();
+    void trackedPost.refresh().then(() => ladder.run());
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */
@@ -194,6 +198,9 @@ export default class Workbench extends Component {
         {{! Quick copy first and unconditional: it is useful on every page,
             including the application form itself, where no post is matched. }}
         <QuickCopyCard />
+        {{! The offer sits ABOVE the card it would populate — accepting it is
+            what turns "no post linked" into a trackable application. }}
+        <LadderOffer />
         <ApplicationCard />
       </Section>
 

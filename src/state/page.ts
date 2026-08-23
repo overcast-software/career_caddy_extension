@@ -2,6 +2,8 @@ import { tracked } from '@glimmer/tracking';
 import { ccGrabPayload, ccCountUnreachableFrames } from '../injected/grab-payload.ts';
 import type { PagePayload } from '../injected/grab-payload.ts';
 import { ccGrabHints } from '../injected/grab-hints.ts';
+import { ccGrabLadderSignals } from '../injected/grab-ladder-signals.ts';
+import type { LadderSignals } from '../injected/grab-ladder-signals.ts';
 import type { HintSelectors, RawHints } from '../injected/grab-hints.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
 
@@ -195,6 +197,28 @@ class PageState {
       return (hit?.result as RawHints) ?? null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Referrer, h1 and og:title — the signals the ladder's later tiers need.
+   *
+   * Top frame only: the referrer of an embedded widget is the page embedding
+   * it, which says nothing about how the USER arrived. Best-effort throughout;
+   * a restricted page returns nulls rather than failing the ladder, because
+   * the earlier tiers may still have an answer.
+   */
+  async grabLadderSignals(): Promise<LadderSignals> {
+    const empty: LadderSignals = { referrer: null, h1: null, ogTitle: null };
+    if (this.tabId === undefined) return empty;
+    try {
+      const [hit] = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId },
+        func: ccGrabLadderSignals,
+      });
+      return (hit?.result as LadderSignals) ?? empty;
+    } catch {
+      return empty;
     }
   }
 
