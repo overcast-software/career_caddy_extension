@@ -1,6 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 import { ccGrabPayload, ccCountUnreachableFrames } from '../injected/grab-payload.ts';
 import type { PagePayload } from '../injected/grab-payload.ts';
+import { ccGrabHints } from '../injected/grab-hints.ts';
+import type { HintSelectors, RawHints } from '../injected/grab-hints.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
 
 /** What capture() returns: the merged page plus how it was assembled. */
@@ -146,6 +148,32 @@ class PageState {
         text: parts.join('\n\n--- frame ---\n\n'),
         frames: parts.length,
       };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Run a per-host selector map against the page.
+   *
+   * The selectors go in through `args` — never a closure. That is the
+   * executeScript boundary, and scripts/injected-gate.mjs fails the build if
+   * it is crossed.
+   *
+   * Top frame only, unlike capture(). Selectors are written against the page
+   * the profile was authored for; running them across every frame invites a
+   * match in someone else's embedded widget, and a wrong apply_url is worse
+   * than none because it poisons dedupe.
+   */
+  async grabHints(selectors: HintSelectors): Promise<RawHints | null> {
+    if (this.tabId === undefined) return null;
+    try {
+      const [hit] = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId },
+        func: ccGrabHints,
+        args: [selectors],
+      });
+      return (hit?.result as RawHints) ?? null;
     } catch {
       return null;
     }

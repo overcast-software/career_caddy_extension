@@ -559,3 +559,16 @@ h1 {
   justify-content: center;
   gap: 5px;
 }
+
+/* A posting that says it is closed — verbatim, so it reads as the page's
+   claim rather than ours. */
+.send__closed {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-soft);
+  border-left: 3px solid var(--error);
+  border-radius: 4px;
+}

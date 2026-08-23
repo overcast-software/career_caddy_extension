@@ -7,6 +7,8 @@ import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { planSend } from '../domain/send-gate.ts';
+import { loadSelectors, REFERRER_HOSTS, CLOSED_PHRASES } from '../data/selectors.ts';
+import { decodeApplyUrl } from '../domain/decoders.ts';
 
 /**
  * "Send this page" — the extension's most-used action.
@@ -29,6 +31,12 @@ export default class SendCard extends Component {
   @tracked kind: 'idle' | 'busy' | 'ok' | 'error' = 'idle';
   @tracked scrapeId: string | null = null;
   @tracked autoScore = true;
+  /**
+   * The verbatim phrase that says this posting is closed, or null. Verbatim
+   * rather than a boolean so it is evidence the server can re-verify against
+   * the captured text, mirroring the scrape graph's own closed_evidence rule.
+   */
+  @tracked closedEvidence: string | null = null;
 
   get page(): typeof page {
     return page;
@@ -107,6 +115,51 @@ export default class SendCard extends Component {
     void this.doSend();
   };
 
+  /**
+   * Best-effort. Every step here is allowed to fail without blocking a send:
+   * a missing profile, a stale selector or a throttled api all degrade to
+   * "send the description and let the server extract", which is exactly what
+   * happened before selectors existed.
+   */
+  private async collectHints(url: string): Promise<Record<string, unknown>> {
+    if (!session.apiKey) return {};
+    let host = '';
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      return {};
+    }
+
+    const bundle = await loadSelectors(host, session.apiKey);
+    const raw = await page.grabHints({
+      applyButtonSelectors: bundle?.applyButtonSelectors ?? [],
+      canonicalLinkSelectors: bundle?.canonicalLinkSelectors ?? [],
+      jobDataSelectors: bundle?.jobDataSelectors ?? {},
+      // Universal, not per-host — worth running even where no profile exists.
+      referrerHosts: REFERRER_HOSTS,
+      closedPhrases: CLOSED_PHRASES,
+    });
+    if (!raw) return {};
+
+    // Decoding happens HERE, not in the injected function: the decoder
+    // registry is module scope and cannot cross the executeScript boundary.
+    // The page hands back a raw href; the panel resolves it.
+    const applyUrl = raw.applyHref
+      ? decodeApplyUrl(bundle?.applyUrlDecoder, raw.applyHref, url)
+      : null;
+
+    this.closedEvidence = raw.closedEvidence;
+
+    return {
+      applyUrl,
+      canonicalLinkHint: raw.canonicalLink,
+      referrerUrl: raw.referrerUrl,
+      structuredPrefill: raw.structuredPrefill,
+      knownGood: bundle?.knownGood ?? false,
+      tier: bundle?.tier ?? null,
+    };
+  }
+
   private async doSend(): Promise<void> {
     if (!session.apiKey) {
       this.kind = 'error';
@@ -168,7 +221,11 @@ export default class SendCard extends Component {
     // /scrapes/from-text/ creates a browser-tier scrape that waits for a
     // Camoufox runner — and on an auth-walled posting that runner can never
     // load the logged-in page, so the scrape hangs forever with no JobPost.
-    const decision = planSend(payload, {}, { autoScore: this.autoScore });
+    // Per-host selectors: extract title/company/apply_url client-side so the
+    // server does not have to re-derive what the page already stated. Their
+    // ABSENCE never changes the path — see the CC-176 note above.
+    const hints = await this.collectHints(payload.url);
+    const decision = planSend(payload, hints, { autoScore: this.autoScore });
     console.debug('[cc] send gate', decision);
 
     const resp = await request<{ data?: { id?: string }; id?: string }>(
@@ -259,6 +316,12 @@ export default class SendCard extends Component {
         disabled={{this.isBusy}}
         {{on "click" this.send}}
       >{{this.sendLabel}}</button>
+    {{/if}}
+
+    {{#if this.closedEvidence}}
+      <p class="send__closed">
+        This posting says: “{{this.closedEvidence}}”
+      </p>
     {{/if}}
 
     {{#if this.status}}
