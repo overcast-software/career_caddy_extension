@@ -32,8 +32,9 @@ export const KEYS = {
  * list "was the default"; the type makes forgetting impossible.
  *
  * Device preferences are deliberately absent — ccTheme, ccPalette,
- * ccLayoutMode. Clearing those on sign-out would reset someone's theme and
- * layout as a side effect of logging out, which is a regression, not tidiness.
+ * ccLayoutMode, ccQuickCopyExpanded. Clearing those on sign-out would reset
+ * someone's theme, layout and card state as a side effect of logging out,
+ * which is a regression, not tidiness.
  */
 export const USER_SCOPED_STORAGE_KEYS: readonly string[] = [
   KEYS.apiKey,

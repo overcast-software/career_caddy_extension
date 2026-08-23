@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import Icon from './icon.gts';
 import type { IconName } from './icon.gts';
 import { me } from '../state/me.ts';
+import { layout } from '../state/layout.ts';
 import { FRONTEND_ORIGIN } from '../lib/api.ts';
 import { isLinkLike, previewOf } from '../domain/quick-copy.ts';
 import type { QuickCopyItem } from '../domain/quick-copy.ts';
@@ -45,6 +46,12 @@ export default class QuickCopyCard extends Component {
    * in the deployed app. Until it lands, profile/edit is where `links` is
    * actually editable. Move this the day that branch merges.
    */
+  get layout(): typeof layout {
+    return layout;
+  }
+
+  toggleExpanded = (): void => layout.toggleQuickCopy();
+
   get editUrl(): string {
     return `${FRONTEND_ORIGIN}/settings/profile/edit`;
   }
@@ -83,8 +90,45 @@ export default class QuickCopyCard extends Component {
       <div class="qc">
         <p class="qc__head">
           Quick copy
-          <a class="qc__edit" href={{this.editUrl}} target="_blank" rel="noopener">Edit</a>
+          <span class="qc__head-actions">
+            <button
+              type="button"
+              class="qc__toggle"
+              aria-expanded={{ariaBool this.layout.quickCopyExpanded}}
+              {{on "click" this.toggleExpanded}}
+            >{{if this.layout.quickCopyExpanded "Collapse" "Expand"}}</button>
+            <a class="qc__edit" href={{this.editUrl}} target="_blank" rel="noopener">Edit</a>
+          </span>
         </p>
+
+        {{#unless this.layout.quickCopyExpanded}}
+          {{!-- CCEXT-38: the bar and the rows are TWO VIEWS OF ONE LIST, and
+              exactly one is on screen. Showing both would give the card two
+              ways to copy the same value, which is worse than either. --}}
+          <div class="qc__bar">
+            {{#each this.items key="name" as |item|}}
+              {{!-- The name rides on title/aria-label because several custom
+                  items share the same golf glyph; without it the bar is a
+                  guessing game, and Expand is the answer for anyone who
+                  cannot tell two apart at a glance. --}}
+              <button
+                type="button"
+                class="qc__chip {{copiedClass this.copiedName item.name this.failed}}"
+                title={{copyLabel this.copiedName item.name this.failed}}
+                aria-label={{copyLabel this.copiedName item.name this.failed}}
+                {{on "click" (pick this.copy item)}}
+              >
+                {{#if (isBrand item.icon)}}
+                  <Icon @name={{brandIcon item.icon}} />
+                {{else}}
+                  <span class="qc__emoji" aria-hidden="true">{{emojiFor item.icon}}</span>
+                {{/if}}
+              </button>
+            {{/each}}
+          </div>
+        {{/unless}}
+
+        {{#if this.layout.quickCopyExpanded}}
         <ul class="qc__list">
           {{#each this.items key="name" as |item|}}
             <li class="qc__row">
@@ -136,6 +180,7 @@ export default class QuickCopyCard extends Component {
             </li>
           {{/each}}
         </ul>
+        {{/if}}
       </div>
     {{/if}}
   </template>
@@ -180,4 +225,22 @@ function sameAsName(item: QuickCopyItem): boolean {
 
 function isCopied(copiedName: string | null, name: string): boolean {
   return copiedName === name;
+}
+
+/**
+ * A chip has no label to swap for "Copied", so the confirmation is a class
+ * plus the tooltip — the legacy's solution, and still the right one.
+ */
+function copiedClass(copiedName: string | null, name: string, failed: boolean): string {
+  if (copiedName !== name) return '';
+  return failed ? 'is-failed' : 'is-copied';
+}
+
+function copyLabel(copiedName: string | null, name: string, failed: boolean): string {
+  if (copiedName !== name) return `Copy ${name}`;
+  return failed ? `Copy failed — ${name}` : `Copied ${name}`;
+}
+
+function ariaBool(value: boolean): string {
+  return value ? 'true' : 'false';
 }

@@ -725,3 +725,39 @@ h1 {
   text-decoration: none;
 }
 .qc__edit:hover { text-decoration: underline; }
+
+/* Quick copy, collapsed: an icon bar. Two views of one list — exactly one is
+   on screen, so the card never offers two ways to copy the same value. */
+.qc__head-actions { display: flex; gap: 10px; align-items: baseline; }
+.qc__toggle {
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-500);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.qc__toggle:hover { text-decoration: underline; }
+
+.qc__bar { display: flex; flex-wrap: wrap; gap: 6px; }
+.qc__chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--text);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.qc__chip:hover { border-color: var(--accent-500); color: var(--accent-500); }
+.qc__chip .icon { width: 15px; height: 15px; }
+.qc__chip.is-copied { border-color: var(--success); color: var(--success); }
+.qc__chip.is-failed { border-color: var(--error); color: var(--error); }

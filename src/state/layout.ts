@@ -16,6 +16,7 @@ import { tracked } from '@glimmer/tracking';
 export type LayoutMode = 'accordion' | 'tabs';
 
 const STORAGE_KEY = 'ccLayoutMode';
+const QC_EXPANDED_KEY = 'ccQuickCopyExpanded';
 
 /**
  * `@tracked` is not a component feature — it works on any class. That single
@@ -49,11 +50,26 @@ class LayoutState {
    */
   @tracked loaded = false;
 
+  /**
+   * Quick copy: an icon bar, or full rows? (CCEXT-38)
+   *
+   * COLLAPSED IS THE DEFAULT, and the reason is subtle enough that the legacy
+   * wrote it down: storage is read asynchronously, so a slow read can only
+   * ever settle INTO the taller state, never flash out of it. Defaulting to
+   * expanded would make the panel visibly shrink on every open.
+   *
+   * A device preference, like `mode` — it lives on the excluded side of
+   * USER_SCOPED_STORAGE_KEYS, because collapsing a card is not user data and
+   * signing out should not undo it.
+   */
+  @tracked quickCopyExpanded = false;
+
   async load(): Promise<void> {
     try {
-      const saved = await chrome.storage.local.get([STORAGE_KEY]);
+      const saved = await chrome.storage.local.get([STORAGE_KEY, QC_EXPANDED_KEY]);
       const mode = saved[STORAGE_KEY];
       if (mode === 'tabs' || mode === 'accordion') this.mode = mode;
+      if (saved[QC_EXPANDED_KEY] === true) this.quickCopyExpanded = true;
     } catch {
       // Storage unavailable (e.g. rendered outside an extension context).
       // The default is fine; this is a preference, not data.
@@ -97,6 +113,17 @@ class LayoutState {
     }
   }
 
+  toggleQuickCopy(): void {
+    this.quickCopyExpanded = !this.quickCopyExpanded;
+    try {
+      void chrome.storage.local
+        .set({ [QC_EXPANDED_KEY]: this.quickCopyExpanded })
+        .catch(() => {});
+    } catch {
+      /* no extension storage here; the card still toggled. */
+    }
+  }
+
   toggle(id: string): void {
     if (this.mode === 'tabs') {
       this.activeId = id;
@@ -130,3 +157,6 @@ export const layout = new LayoutState();
  * extension learned this the hard way; see USER_SCOPED_STORAGE_KEYS.
  */
 export const LAYOUT_STORAGE_KEY = STORAGE_KEY;
+
+/** Same reasoning as LAYOUT_STORAGE_KEY: device preference, never wiped. */
+export const QUICK_COPY_EXPANDED_KEY = QC_EXPANDED_KEY;
