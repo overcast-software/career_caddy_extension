@@ -64,6 +64,41 @@ only. The highest-volume route gains nothing from either.
 
 ---
 
+## ⛔ GAP 0 — the Send button is staff-gated, and the gate is over-broad
+
+`POST /api/v1/scrapes/` returns **403 "Scraping is staff-only during alpha."**
+for any non-staff user (`views/scrapes.py:364-368`). That is the extension's
+primary button. It works today only because Doug is staff.
+
+**The gate is in the wrong place, and Doug's rationale is why.** Scraping is
+staff-only *because the browser tier needs a headed browser* — an operator
+resource that costs a machine, a session, and a captcha solve. Regular users
+are meant to use **the Send button instead**, precisely because it needs none
+of that: the user's own browser already did the capture.
+
+But the gate cannot tell the two apart. It fires at **line 364**; `source_mode`
+is not read until **line 387**. It gates the endpoint, not the capability.
+
+| | needs a headed browser | currently gated |
+|---|---|---|
+| browser tier (`status='hold'` → `claim_next` → runner) | **yes** | yes ✅ |
+| extension-direct (capture already done client-side) | **no** | yes ❌ |
+
+**Verdict: API GAP — the highest-priority one in this document.** It blocks
+every non-staff user from the feature they are supposed to use, and it blocks
+them from the *only* path that does not consume operator resources.
+
+**Fix:** move the staff check below the `source_mode` determination and apply
+it only when the request would enqueue browser work. Extension-direct becomes
+`IsAuthenticated` like `/from-text/` already is (`views/base.py:34`) — note
+that inconsistency is itself evidence: the text-paste route, which also needs
+no browser, is already open to everyone.
+
+**Do not fix this in the client by hiding Send behind `me.isStaff`.** That
+would make the button correct and the product wrong.
+
+---
+
 ## The client surface
 
 Every path the extension calls. Nothing else talks to the server.
