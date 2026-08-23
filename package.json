@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Career Caddy browser extension \u2014 Glimmer UI, MV3, Chrome + Firefox.",
   "scripts": {
-    "build": "npm run bump && npm run gate:layering && npm run build:chrome && npm run build:firefox",
+    "build": "npm run bump && npm run gate:layering && npm run typecheck && npm run build:chrome && npm run build:firefox",
     "build:chrome": "vite build --mode chrome && npm run gate -- chrome && npm run gate:injected -- chrome",
     "build:firefox": "vite build --mode firefox && npm run gate -- firefox && npm run gate:injected -- firefox",
     "bump": "node scripts/bump-build.mjs",
@@ -16,7 +16,8 @@
     "lint:firefox": "npm run build && web-ext lint --source-dir dist/firefox",
     "package:firefox": "npm run build && web-ext build --source-dir dist/firefox --artifacts-dir web-ext-artifacts --overwrite-dest",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "glint"
   },
   "dependencies": {
     "@glimmer/component": "^2.1.1",
@@ -27,6 +28,8 @@
     "@babel/plugin-transform-typescript": "^8.0.1",
     "@embroider/macros": "^1.20.6",
     "@embroider/vite": "^1.7.10",
+    "@glint/core": "^1.5.2",
+    "@glint/environment-ember-template-imports": "^1.5.2",
     "@types/chrome": "^0.1.31",
     "acorn": "^8.18.0",
     "babel-plugin-ember-template-compilation": "^4.0.0",

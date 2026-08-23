@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import DraftBox from './draft-box.gts';
@@ -55,7 +56,15 @@ export default class Workbench extends Component {
    */
   private ticker: ReturnType<typeof setInterval> | undefined;
 
-  constructor(owner: unknown, args: object) {
+  /**
+   * `owner` is typed as the base class declares it, not as what arrives.
+   * `renderComponent` is called WITHOUT an owner, so at runtime this is
+   * null — the whole point of the exercise. The type follows the superclass
+   * signature because that is what `super()` must satisfy; the runtime truth
+   * is written here rather than smuggled in as `unknown`, which only moved
+   * the lie somewhere the compiler could not see it.
+   */
+  constructor(owner: Owner, args: object) {
     super(owner, args);
     this.ticker = setInterval(() => (this.uptime += 1), 1000);
     void theme.load();
@@ -84,7 +93,7 @@ export default class Workbench extends Component {
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */
-  willDestroy(): void {
+  override willDestroy(): void {
     super.willDestroy();
     if (this.ticker !== undefined) clearInterval(this.ticker);
   }

@@ -5,9 +5,19 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
 
-    // Decorators. @tracked is a decorator, and decorator-transforms lowers it
-    // at build time, so TypeScript only needs to accept the syntax.
-    "experimentalDecorators": false,
+    // Decorators. LEGACY, matching what the build actually does: every file
+    // (.ts and .gts alike) goes through babel + decorator-transforms, which
+    // implements the legacy protocol. This has to agree with vite.config.mjs's
+    // `enforce: 'pre'` — when the two disagreed, .ts got TC39 decorators while
+    // .gts got legacy, and the two protocols in one bundle produced "Invalid
+    // value used as weak map key" at module eval: a blank panel with a clean
+    // console.
+    //
+    // It was `false` here on the theory that TypeScript need only accept the
+    // syntax. It does not: with TC39 semantics assumed, every single @tracked
+    // fails to typecheck (TS1240 x43). The compiler models the protocol, so it
+    // has to be told which one.
+    "experimentalDecorators": true,
     "useDefineForClassFields": false,
 
     // strict is the whole point of choosing TypeScript. It turns on, among
@@ -25,6 +35,24 @@
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+
+    // ember-source publishes NO "types" entry and exposes its packages only
+    // as the subpath export "./*", so `import { tracked } from
+    // '@glimmer/tracking'` resolves to nothing for TypeScript — the same
+    // problem vite.config.mjs solves at bundle time with emberSourceResolver.
+    // These paths are the compiler's half of that arrangement; the two must
+    // stay in step, because a mapping that only exists in one of them means
+    // code that type-checks and will not bundle, or the reverse.
+    //
+    // @glimmer/component is listed FIRST and explicitly: it is a real npm
+    // package with its own declarations, and the @glimmer/* wildcard below
+    // would otherwise capture it and send it into ember-source, where it does
+    // not live.
+    "paths": {
+      "@glimmer/component": ["./node_modules/@glimmer/component/dist/index.d.ts"],
+      "@glimmer/*": ["./node_modules/ember-source/types/stable/@glimmer/*"],
+      "@ember/*": ["./node_modules/ember-source/types/stable/@ember/*"]
+    },
     "types": ["chrome"]
   },
   "include": ["src/**/*.ts", "src/**/*.gts", "*.mjs"],

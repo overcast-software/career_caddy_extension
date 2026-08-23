@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { access } from '../state/access.ts';
@@ -28,7 +29,15 @@ export default class PermissionProbe extends Component {
   @tracked lines: Line[] = [];
   @tracked busy = false;
 
-  constructor(owner: unknown, args: object) {
+  /**
+   * `owner` is typed as the base class declares it, not as what arrives.
+   * `renderComponent` is called WITHOUT an owner, so at runtime this is
+   * null — the whole point of the exercise. The type follows the superclass
+   * signature because that is what `super()` must satisfy; the runtime truth
+   * is written here rather than smuggled in as `unknown`, which only moved
+   * the lie somewhere the compiler could not see it.
+   */
+  constructor(owner: Owner, args: object) {
     super(owner, args);
     void this.dump();
     // A snapshot dump silently goes stale the moment you switch tabs, and a

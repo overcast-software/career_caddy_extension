@@ -22,10 +22,17 @@ export default class AccessGate extends Component {
 
   <template>
     {{#if this.access.needsTabs}}
-      {{! The chicken-and-egg, stated plainly. Chrome withholds a tab's URL
+      {{!-- The chicken-and-egg, stated plainly. Chrome withholds a tab's URL
           without host access, so the panel cannot name the site it would ask
-          about. `tabs` reveals URLs WITHOUT granting access to any of them —
-          a strictly milder step, and the only way to reach the per-site ask. }}
+          about. The "tabs" permission reveals URLs WITHOUT granting access to
+          any of them — a strictly milder step, and the only way to reach the
+          per-site ask.
+
+          NO BACKTICKS ANYWHERE IN A .gts TEMPLATE, comments included. Glint
+          transforms .gts by embedding the template in a JS template literal,
+          so a backtick closes it early and you get a lexical error pointing
+          at the template tag rather than at the character. The build compiler
+          does not care, so this only ever shows up under Glint. --}}
       <div class="gate">
         <p class="gate__ask">Career Caddy can't tell which page you're on.</p>
         <button type="button" class="gate__btn" {{on "click" this.enableTabs}}>
