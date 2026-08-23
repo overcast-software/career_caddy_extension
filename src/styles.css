@@ -19,6 +19,19 @@
  * ======================================================================= */
 
 :root {
+  /* CCEXT-63. The panel themes with a `data-theme` attribute, which the USER
+   * AGENT CANNOT SEE — so without this every browser-rendered control stays
+   * light while the panel is dark: the `<select>`'s popup list (which is drawn
+   * by the browser, not by us, and was at risk of white-on-white), the caret
+   * and selection in all three textareas, scrollbars on the question list and
+   * the error log, `::placeholder`, autofill.
+   *
+   * Two declarations retire the whole class, current and future, because the
+   * UA applies them to controls we never style. `theme.ts:61-66` always
+   * resolves `system` to an explicit attribute, so these two cases are
+   * exhaustive — there is no state where the panel is dark and the attribute
+   * is absent. */
+  color-scheme: light;
   --bg: #ffffff;
   --bg-soft: #f8fafc;
   --bg-input: #ffffff;
@@ -42,6 +55,8 @@
 }
 
 :root[data-theme='dark'] {
+  /* The other half of CCEXT-63 — see the note in `:root` above. */
+  color-scheme: dark;
   --bg: #0f172a;
   --bg-soft: #1e293b;
   --bg-input: #1e293b;
@@ -1104,6 +1119,19 @@ h1 {
   padding: 0;
   list-style: none;
 }
+/* CCEXT-61. This paired `--accent-700` text with an `--accent-50` fill, which
+ * is handsome in light (indigo 7.07:1) and unreadable in dark in ALL SIX
+ * palettes — 2.02:1 indigo through 2.98:1 amber, against 4.5:1 for 11px text.
+ *
+ * The cause is structural, not a bad colour pick: the token layer overrides
+ * `--accent-50`/`--accent-100` per dark palette but leaves 500/600/700 alone,
+ * so ANY rule pairing a 600/700 foreground with a 50 background inverts in
+ * dark. The tint goes near-black; the hue does not move.
+ *
+ * So this stops pairing an accent hue with an accent tint at all, and uses the
+ * neutral surface `.tp`, `.lp` and `.qc__copy` already use — 17.06:1 light,
+ * 14.63:1 dark, and it cannot invert because neither token is per-palette.
+ * The accent stays for things that are ACTIONS; a chip is a label. */
 .ae__chip {
   display: inline-flex;
   align-items: center;
@@ -1111,9 +1139,9 @@ h1 {
   max-width: 100%;
   padding: 2px 4px 2px 8px;
   font-size: 11px;
-  color: var(--accent-700);
-  background: var(--accent-50);
-  border: 1px solid var(--accent-100);
+  color: var(--text);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
 }
 .ae__chip-text { overflow-wrap: anywhere; }
