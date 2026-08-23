@@ -27,6 +27,7 @@ import { scoreRunner } from '../state/score.ts';
 import { linkPicker } from '../state/link-picker.ts';
 import { me } from '../state/me.ts';
 import { ladder } from '../state/ladder.ts';
+import { applyBackfill } from '../state/apply-backfill.ts';
 import { theme } from '../state/theme.ts';
 
 /**
@@ -87,7 +88,10 @@ export default class Workbench extends Component {
       // once at open — a panel outlives many pages.
       // The ladder only runs when the by-link lookup came back empty, so it
       // is chained behind it rather than raced against it.
-      void trackedPost.refresh().then(() => ladder.run());
+      void trackedPost.refresh().then(() => {
+        void ladder.run();
+        void applyBackfill.maybeBackfill();
+      });
       // A score run belongs to the post it was started on. Carrying its
       // state to the next page would narrate someone else's scoring.
       scoreRunner.reset();
@@ -99,7 +103,10 @@ export default class Workbench extends Component {
     });
     access.listen();
     void access.refresh();
-    void trackedPost.refresh().then(() => ladder.run());
+    void trackedPost.refresh().then(() => {
+        void ladder.run();
+        void applyBackfill.maybeBackfill();
+      });
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */

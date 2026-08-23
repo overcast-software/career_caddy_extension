@@ -77,7 +77,29 @@ prefixes, host agreement and title similarity. CCEXT-32 replaced a
 first-tier-wins ladder with aggregated scoring. The `match-result-*` and
 `ladder-offer-*` element ids are only its UI.
 
-### Apply attribution — 9 functions
+### Apply attribution — 9 functions (CCEXT-51, **HALF DONE**)
+
+**Done — the passive half, `state/apply-backfill.ts`:**
+`maybeBackfillApplyUrl` ✅ — lands on a tracked page whose post has no
+apply_url, reads the page's apply button, PATCHes it. Safe to run silently
+because it ONLY fills an empty field: it re-checks `wouldReplaceApplyUrl`, the
+same predicate the link picker uses to demand a second click, so the silent
+path can never overwrite a value a human chose.
+
+Also extracted `state/hints.ts` on the way — hint collection had been private
+to SendCard, and the backfill needed the same question asked the same way. Two
+copies of a rule is how this repo got two JobPost mappers that could disagree.
+
+**Remaining — the active half (the stash):**
+`maybeOfferApplyAttribution` `confirmApplyAttribution` `backfillApplyUrlFor`
+`findFreshApplyStash` `loadApplyStash` `saveApplyStash` `stashPendingApply`
+`clearApplyStashForJobPost`
+
+Constants read from the legacy, not invented: `APPLY_STASH_MAX = 5`,
+`APPLY_STASH_TTL_MS = 6h`, deduped by **origin** (not by URL) so one entry
+survives per ATS you bounced through.
+
+**Original notes:**
 `maybeOfferApplyAttribution` `confirmApplyAttribution` `backfillApplyUrlFor`
 `maybeBackfillApplyUrl` `findFreshApplyStash` `loadApplyStash` `saveApplyStash`
 `stashPendingApply` `clearApplyStashForJobPost`

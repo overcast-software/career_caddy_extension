@@ -5,12 +5,12 @@ import { on } from '@ember/modifier';
 import { request, FRONTEND_ORIGIN } from '../lib/api.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
+import { collectHints } from '../state/hints.ts';
+import type { PageHints } from '../state/hints.ts';
 import { errorLog } from '../state/errors.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { planSend } from '../domain/send-gate.ts';
-import { loadSelectors, REFERRER_HOSTS, CLOSED_PHRASES } from '../data/selectors.ts';
-import { decodeApplyUrl } from '../domain/decoders.ts';
 
 /**
  * "Send this page" — the extension's most-used action.
@@ -141,43 +141,21 @@ export default class SendCard extends Component {
    * "send the description and let the server extract", which is exactly what
    * happened before selectors existed.
    */
-  private async collectHints(url: string): Promise<Record<string, unknown>> {
-    if (!session.apiKey) return {};
-    let host = '';
-    try {
-      host = new URL(url).hostname;
-    } catch {
-      return {};
-    }
-
-    const bundle = await loadSelectors(host, session.apiKey);
-    const raw = await page.grabHints({
-      applyButtonSelectors: bundle?.applyButtonSelectors ?? [],
-      canonicalLinkSelectors: bundle?.canonicalLinkSelectors ?? [],
-      jobDataSelectors: bundle?.jobDataSelectors ?? {},
-      // Universal, not per-host — worth running even where no profile exists.
-      referrerHosts: REFERRER_HOSTS,
-      closedPhrases: CLOSED_PHRASES,
-    });
-    if (!raw) return {};
-
-    // Decoding happens HERE, not in the injected function: the decoder
-    // registry is module scope and cannot cross the executeScript boundary.
-    // The page hands back a raw href; the panel resolves it.
-    const applyUrl = raw.applyHref
-      ? decodeApplyUrl(bundle?.applyUrlDecoder, raw.applyHref, url)
-      : null;
-
-    this.closedEvidence = raw.closedEvidence;
-
-    return {
-      applyUrl,
-      canonicalLinkHint: raw.canonicalLink,
-      referrerUrl: raw.referrerUrl,
-      structuredPrefill: raw.structuredPrefill,
-      knownGood: bundle?.knownGood ?? false,
-      tier: bundle?.tier ?? null,
-    };
+  /**
+   * Delegates to state/hints.ts — shared with the apply-url backfill so the
+   * two cannot drift. The only component-local part is surfacing
+   * closedEvidence, which is a display concern.
+   *
+   * DELIBERATELY NOT named collectHints. A method whose body calls an import
+   * of the same name resolves to the import today and recurses the moment
+   * someone "tidies" it to `this.collectHints(...)`. That is not
+   * hypothetical: fail() in this very file was rewritten into a call to
+   * itself and blew the stack on every error path for eleven versions.
+   */
+  private async hintsForPage(url: string): Promise<PageHints> {
+    const hints = await collectHints(url);
+    this.closedEvidence = hints.closedEvidence;
+    return hints;
   }
 
   /** Page-scoped state only. `autoScore` is a preference and survives. */
@@ -275,7 +253,7 @@ export default class SendCard extends Component {
     // Per-host selectors: extract title/company/apply_url client-side so the
     // server does not have to re-derive what the page already stated. Their
     // ABSENCE never changes the path — see the CC-176 note above.
-    const hints = await this.collectHints(payload.url);
+    const hints = await this.hintsForPage(payload.url);
     if (stale()) return;
     const decision = planSend(payload, hints, { autoScore: this.autoScore });
     console.debug('[cc] send gate', decision);
