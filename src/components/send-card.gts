@@ -58,6 +58,34 @@ export default class SendCard extends Component {
     return trackedPost.isKnown && !trackedPost.needsRefresh;
   }
 
+  get tracked(): typeof trackedPost {
+    return trackedPost;
+  }
+
+  /**
+   * RESEND MODE. A JobPost exists at this URL but the api flags it
+   * incomplete — a cc_auto email-stub, a user flag, or the
+   * CompletenessReviewer rejecting an earlier scrape.
+   *
+   * The legacy extension treats this as a distinct MODE rather than a
+   * caption, and it is right to: the heading, a banner and the button label
+   * all change, so the user can see they are REFRESHING an existing post
+   * rather than creating a second one. Sending here is the useful action,
+   * which is exactly why it must not look like the ordinary one.
+   */
+  get isResend(): boolean {
+    return trackedPost.needsRefresh;
+  }
+
+  get heading(): string {
+    return this.isResend ? 'Complete this post' : 'Send this page to Career Caddy';
+  }
+
+  get sendLabel(): string {
+    if (this.isBusy) return 'Sending…';
+    return this.isResend ? 'Resend to complete' : 'Send this page';
+  }
+
   get scrapeUrl(): string {
     return `${FRONTEND_ORIGIN}/scrapes/${this.scrapeId}`;
   }
@@ -168,6 +196,16 @@ export default class SendCard extends Component {
     {{else if this.alreadyKnown}}
       {{! TrackedCard is showing it. Nothing to offer. }}
     {{else}}
+      <p class="send__heading">{{this.heading}}</p>
+
+      {{#if this.isResend}}
+        <div class="send__incomplete">
+          <div class="send__incomplete-tag">Existing post · incomplete</div>
+          <div class="send__incomplete-title">{{this.tracked.post.title}}</div>
+          <div class="send__incomplete-company">{{this.tracked.post.company}}</div>
+        </div>
+      {{/if}}
+
       <label class="send__opt">
         <input
           type="checkbox"
@@ -182,7 +220,7 @@ export default class SendCard extends Component {
         class="send__btn"
         disabled={{this.isBusy}}
         {{on "click" this.send}}
-      >{{if this.isBusy "Sending…" "Send this page"}}</button>
+      >{{this.sendLabel}}</button>
     {{/if}}
 
     {{#if this.status}}

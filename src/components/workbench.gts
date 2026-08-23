@@ -14,6 +14,7 @@ import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
+import { scoreRunner } from '../state/score.ts';
 
 /**
  * The panel root.
@@ -62,6 +63,9 @@ export default class Workbench extends Component {
       // "Do we already know this page?" is asked on every navigation, not
       // once at open — a panel outlives many pages.
       void trackedPost.refresh();
+      // A score run belongs to the post it was started on. Carrying its
+      // state to the next page would narrate someone else's scoring.
+      scoreRunner.reset();
     });
     access.listen();
     void access.refresh();

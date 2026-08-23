@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
+import { on } from '@ember/modifier';
 import { FRONTEND_ORIGIN } from '../lib/api.ts';
 import { trackedPost } from '../state/tracked.ts';
+import { scoreRunner } from '../state/score.ts';
 
 /**
  * What Career Caddy already knows about this page.
@@ -14,16 +16,34 @@ export default class TrackedCard extends Component {
     return trackedPost;
   }
 
+  get score(): typeof scoreRunner {
+    return scoreRunner;
+  }
+
   get postUrl(): string {
     return `${FRONTEND_ORIGIN}/job-posts/${trackedPost.post?.id}`;
   }
 
-  /** Rendered as a percentage; the api stores 0–1. */
+  get scoreUrl(): string {
+    return `${FRONTEND_ORIGIN}/job-posts/${trackedPost.post?.id}/scores/${scoreRunner.scoreId}`;
+  }
+
+  /** The api stores 0–1; a bare "0.82" reads as a rating out of ten. */
   get scoreLabel(): string {
     const s = trackedPost.post?.topScore;
     if (typeof s !== 'number') return '';
     return s <= 1 ? `${Math.round(s * 100)}%` : String(Math.round(s));
   }
+
+  /**
+   * Someone else's score is already running. Distinct from OUR run: this one
+   * we cannot narrate, because we have no score id to poll.
+   */
+  get otherScorePending(): boolean {
+    return !!trackedPost.post?.hasPendingScore && !scoreRunner.isBusy;
+  }
+
+  startScore = (): void => scoreRunner.start();
 
   <template>
     {{#if this.tracked.isKnown}}
@@ -32,7 +52,7 @@ export default class TrackedCard extends Component {
           <span class="tp__badge">In your library</span>
           {{#if this.scoreLabel}}
             <span class="tp__score">{{this.scoreLabel}}</span>
-          {{else if this.tracked.post.hasPendingScore}}
+          {{else if this.otherScorePending}}
             <span class="tp__score tp__score--pending">scoring…</span>
           {{/if}}
         </div>
@@ -42,17 +62,30 @@ export default class TrackedCard extends Component {
           <p class="tp__company">{{this.tracked.post.company}}</p>
         {{/if}}
 
-        <a class="tp__link" href={{this.postUrl}} target="_blank" rel="noopener">
-          Open in Career Caddy →
-        </a>
-
-        {{#if this.tracked.needsRefresh}}
-          {{! The api says this post never finished extracting, so sending it
-              again is the useful action rather than a duplicate. }}
-          <p class="tp__warn">
-            This one didn't finish extracting — sending it again will refresh it.
-          </p>
+        {{#if this.score.canScore}}
+          <button type="button" class="tp__btn" {{on "click" this.startScore}}>
+            Score this post
+          </button>
         {{/if}}
+
+        {{#if this.score.isBusy}}
+          {{! The panel persists, so scoring is narrated here rather than
+              handed to the worker and forgotten. }}
+          <p class="tp__status">{{this.score.message}}</p>
+        {{else if this.score.message}}
+          <p class="tp__status">{{this.score.message}}</p>
+        {{/if}}
+
+        <div class="tp__links">
+          <a class="tp__link" href={{this.postUrl}} target="_blank" rel="noopener">
+            Open in Career Caddy →
+          </a>
+          {{#if this.score.scoreId}}
+            <a class="tp__link" href={{this.scoreUrl}} target="_blank" rel="noopener">
+              See the score →
+            </a>
+          {{/if}}
+        </div>
       </div>
     {{else if (isLooking this.tracked.state)}}
       <p class="tp__looking">Checking your library…</p>
