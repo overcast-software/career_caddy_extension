@@ -974,7 +974,8 @@ h1 {
 /* Wrap, never truncate — a URL's tail is the useful half. */
 .dh__grid dd { margin: 0; overflow-wrap: anywhere; }
 
-/* --- CCEXT-45 answer desk ------------------------------------------------ */
+
+/* --- CCEXT-45 answer desk: frame ----------------------------------------- */
 .ad { margin-bottom: 12px; }
 .ad__head {
   display: flex;
@@ -989,7 +990,13 @@ h1 {
   letter-spacing: 0.04em;
 }
 .ad__head-actions { display: flex; align-items: center; gap: 8px; }
-.ad__busy { font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--accent-500); }
+.ad__busy {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-500);
+}
 .ad__scan {
   padding: 3px 8px;
   font: inherit;
@@ -1003,18 +1010,33 @@ h1 {
   cursor: pointer;
 }
 .ad__scan:hover { border-color: var(--accent-500); }
-.ad__note { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
 
-.ad__pick-label,
-.ad__input-label {
-  display: block;
+/* --- the question picker: two views of one list --------------------------- */
+.qp { margin-bottom: 10px; }
+.qp__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
 }
-/* The extension's first <select>. Tokens only, so light/dark x 6 palettes
-   come free — a literal colour here is the one thing that breaks that. */
-.ad__picker {
+.qp__label { font-size: 11px; color: var(--text-muted); }
+.qp__toggle {
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.qp__toggle:hover { border-color: var(--accent-500); color: var(--accent-500); }
+.qp__empty { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+
+/* The extension's first <select>. var() tokens only, so light/dark x 6
+   palettes come free — a literal colour here is the one thing that breaks it. */
+.qp__select {
   width: 100%;
   padding: 6px 8px;
   font: inherit;
@@ -1024,11 +1046,45 @@ h1 {
   border: 1px solid var(--border-strong);
   border-radius: 6px;
 }
-.ad__picker:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+.qp__select:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
 
-.ad__q { margin: 10px 0 0; font-size: 12px; font-weight: 600; line-height: 1.4; }
-.ad__how { margin: 2px 0 0; font-size: 10px; font-style: italic; color: var(--text-muted); }
-.ad__choice {
+.qp__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.qp__row + .qp__row { border-top: 1px solid var(--divider); }
+.qp__pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.qp__pick:hover { background: var(--bg-soft); }
+.qp__pick.is-selected { background: var(--accent-50); }
+/* Fixed width so the question text sits on the same left edge whether or not
+   this row holds the flag — the selection must not shift the list. */
+.qp__flag { flex: 0 0 1.1em; font-size: 12px; line-height: 1.4; }
+.qp__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.qp__q { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.qp__meta { font-size: 10px; color: var(--text-muted); }
+
+/* --- the answer editor ---------------------------------------------------- */
+.ae { margin-top: 10px; }
+.ae__q { margin: 0; font-size: 12px; font-weight: 600; line-height: 1.4; }
+.ae__how { margin: 2px 0 0; font-size: 10px; font-style: italic; color: var(--text-muted); }
+.ae__choice {
   margin: 8px 0 0;
   padding: 6px 8px;
   font-size: 11px;
@@ -1038,10 +1094,17 @@ h1 {
   border: 1px dashed var(--border-strong);
   border-radius: 6px;
 }
-.ad__warn { margin: 6px 0 0; font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+.ae__warn { margin: 6px 0 0; font-size: 10px; line-height: 1.4; color: var(--text-muted); }
 
-.ad__chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
-.ad__chip {
+.ae__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ae__chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1053,8 +1116,8 @@ h1 {
   border: 1px solid var(--accent-100);
   border-radius: 999px;
 }
-.ad__chip-text { overflow-wrap: anywhere; }
-.ad__chip-x {
+.ae__chip-text { overflow-wrap: anywhere; }
+.ae__chip-x {
   padding: 0 4px;
   font: inherit;
   font-size: 12px;
@@ -1064,9 +1127,10 @@ h1 {
   border: 0;
   cursor: pointer;
 }
-.ad__chip-x:hover { color: var(--error); }
+.ae__chip-x:hover { color: var(--error); }
 
-.ad__input {
+.ae__input-label { display: block; margin: 10px 0 4px; font-size: 11px; color: var(--text-muted); }
+.ae__input {
   width: 100%;
   padding: 6px 8px;
   font: inherit;
@@ -1078,11 +1142,10 @@ h1 {
   border-radius: 6px;
   resize: vertical;
 }
-.ad__input:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
-.ad__input-label { margin-top: 10px; }
+.ae__input:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
 
-.ad__actions { display: flex; gap: 6px; margin-top: 8px; }
-.ad__btn {
+.ae__actions { display: flex; gap: 6px; margin-top: 8px; }
+.ae__btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1095,7 +1158,7 @@ h1 {
   border-radius: 6px;
   cursor: pointer;
 }
-.ad__btn:hover { border-color: var(--accent-500); }
-.ad__btn:disabled { opacity: 0.6; cursor: default; }
-.ad__btn--go { font-weight: 600; }
-.ad__status { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+.ae__btn:hover { border-color: var(--accent-500); }
+.ae__btn:disabled { opacity: 0.6; cursor: default; }
+.ae__btn--go { font-weight: 600; }
+.ae__status { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }

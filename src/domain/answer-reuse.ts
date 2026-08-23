@@ -1,3 +1,4 @@
+import { draftScopeFor } from './answer-desk.ts';
 import type { PageQuestion } from './answer-desk.ts';
 
 /**
@@ -141,7 +142,16 @@ export function autoInsertDecision(input: AutoInsertInput): AutoInsertDecision {
   // check the popup never needed: it died on blur, so an armed insert could
   // not straddle a navigation. Here it can, and the URL is the only thing that
   // says otherwise.
-  if (input.draftUrl !== input.pageUrl) {
+  //
+  // Compared through `draftScopeFor`, THE SAME FUNCTION THE STORE KEYS ON, and
+  // that pairing is load-bearing in both directions. Compare raw URLs here and
+  // a Workday `?step=2` refuses an insert for a draft the store happily
+  // returned — the gate and the store disagreeing about what "this page" means
+  // is worse than either rule alone. An empty scope (unparseable URL) refuses,
+  // rather than matching every other unparseable URL.
+  const draftScope = draftScopeFor(input.draftUrl);
+  const pageScope = draftScopeFor(input.pageUrl);
+  if (!draftScope || !pageScope || draftScope !== pageScope) {
     return {
       insert: false,
       reason: 'page-changed',

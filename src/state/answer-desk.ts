@@ -10,6 +10,7 @@ import {
   addInstruction,
   buildEntries,
   composeInjectedPrompt,
+  draftScopeFor,
   extractAnswerRefs,
   isResumable,
   keyOf,
@@ -58,10 +59,14 @@ import { trackedPost } from './tracked.ts';
  *
  * ── PAGE SCOPING IS THE HARD PART, AND IT GOT HARDER ───────────────────────
  *
- * See domain/answer-desk.ts for why the store nests under the URL. The short
- * version: in a popup, navigating away reset this by accident. Nothing resets
- * in a panel, so the URL is the only thing between question 3 of the Stripe
- * form and the textarea on the Toptal form you just switched to.
+ * See domain/answer-desk.ts for why the store nests under a page SCOPE. The
+ * short version: in a popup, navigating away reset this by accident. Nothing
+ * resets in a panel, so the scope is the only thing between question 3 of the
+ * Stripe form and the textarea on the Toptal form you just switched to.
+ *
+ * Scope is `origin + pathname` — deliberately looser than the raw URL, because
+ * every ATS worth supporting steps through an application with `?step=` or
+ * `#/section/`, and a raw-URL key loses your drafts at step 2.
  */
 
 const STORE_KEY: string = KEYS.answerDrafts;
@@ -91,8 +96,14 @@ class AnswerDesk {
    */
   @tracked drafts: Record<string, AnswerDraft> = {};
 
-  /** The URL `drafts` belongs to. Every write re-checks it. */
-  private url = '';
+  /**
+   * The SCOPE `drafts` belongs to — origin + pathname, not the raw URL.
+   *
+   * Every write and every staleness check re-derives from this, so a Workday
+   * `?step=2` keeps its drafts and its in-flight generations instead of
+   * abandoning both at the page you were halfway through.
+   */
+  private scope = '';
   /** Tokens already auto-delivered, so one field is never written twice. */
   private delivered = new Map<string, string>();
   private persistTimer: ReturnType<typeof setTimeout> | undefined;
@@ -129,19 +140,25 @@ class AnswerDesk {
     await this.flushPersist();
 
     const url = page.url;
+    const scope = draftScopeFor(url);
+
+    // Cleared even when the SCOPE is unchanged. A step change within one form
+    // is still a new DOM: every token was regenerated, so the stamps we hold
+    // are dead and the delivered-token guard is about fields that no longer
+    // exist. The drafts survive; the page-side handles do not.
     this.fields = [];
     this.selectedKey = null;
     this.scanState = 'idle';
     this.scanNote = '';
     this.delivered.clear();
 
-    const drafts = await this.readPage(url);
+    const drafts = await this.readPage(scope);
     if (page.url !== url) return; // superseded while we read
 
-    // `url` and `drafts` are assigned together, with no await between them.
+    // `scope` and `drafts` are assigned together, with no await between them.
     // Anything that reads one and then the other must never see a pair from
     // two different pages.
-    this.url = url;
+    this.scope = scope;
     this.drafts = drafts;
     void this.reconcile();
   }
@@ -221,7 +238,12 @@ class AnswerDesk {
    * time at evendent.io".
    */
   async run(key: string): Promise<void> {
+    // Two values, deliberately. `startedScope` decides whether this run is
+    // still relevant (a step change is not a new page). `startedUrl` is the raw
+    // URL handed to autoInsertDecision, which scopes it itself — passing an
+    // already-scoped value there would hide which comparison is being made.
     const startedUrl = page.url;
+    const startedScope = draftScopeFor(startedUrl);
     if (!session.apiKey) {
       this.mutate(key, (d) => ({ ...d, status: 'failed', note: 'Not connected.' }));
       return;
@@ -248,10 +270,11 @@ class AnswerDesk {
     // one", and handing back the same saved answer is the opposite of that.
     if (!draft.content && !draft.instructions.length) {
       const saved = await findSavedAnswer(session.apiKey, draft.label);
-      if (this.stale(key, startedUrl)) return;
+      if (this.stale(key, startedScope)) return;
       if (saved?.content) {
         this.mutate(key, (d) => ({
           ...d,
+          answerId: saved.id,
           content: saved.content,
           sourceCompanyId: saved.sourceCompanyId,
           sourceCompany: saved.sourceCompany,
@@ -264,14 +287,14 @@ class AnswerDesk {
     }
 
     const questionId = draft.questionId ?? (await this.mint(key, draft.label));
-    if (this.stale(key, startedUrl)) return;
+    if (this.stale(key, startedScope)) return;
     if (!questionId) {
       this.fail(key, 'Could not create the question.');
       return;
     }
 
     const references = await this.resolveReferences(draft.instructions);
-    if (this.stale(key, startedUrl)) return;
+    if (this.stale(key, startedScope)) return;
 
     const injected = composeInjectedPrompt({
       instructions: draft.instructions,
@@ -279,8 +302,14 @@ class AnswerDesk {
       references,
     });
 
-    const started = await requestAnswer(session.apiKey, questionId, injected);
-    if (this.stale(key, startedUrl)) return;
+    const started = await requestAnswer(session.apiKey, questionId, {
+      injectedPrompt: injected,
+      // Named now, sent never — `requestAnswer` drops it until the api has a
+      // field for it. This is the seam that makes adopting the real revise
+      // contract a one-line change there rather than a change here.
+      reviseAnswerId: draft.answerId,
+    });
+    if (this.stale(key, startedScope)) return;
     if (!started.ok) {
       this.fail(key, started.error);
       return;
@@ -291,7 +320,7 @@ class AnswerDesk {
       pendingAnswerId: started.answerId,
       pendingSince: Date.now(),
     }));
-    await this.poll(key, started.answerId, startedUrl);
+    await this.poll(key, started.answerId, startedScope);
   }
 
   /**
@@ -303,7 +332,7 @@ class AnswerDesk {
    */
   async reconcile(): Promise<void> {
     if (!session.apiKey) return;
-    const startedUrl = page.url;
+    const startedScope = draftScopeFor(page.url);
     const now = Date.now();
 
     for (const [key, draft] of Object.entries(this.drafts)) {
@@ -321,7 +350,7 @@ class AnswerDesk {
         }));
         continue;
       }
-      void this.poll(key, draft.pendingAnswerId, startedUrl);
+      void this.poll(key, draft.pendingAnswerId, startedScope);
     }
   }
 
@@ -423,16 +452,16 @@ class AnswerDesk {
    * in storage, because the generation is still running and `reconcile()` is
    * how it comes home.
    */
-  private async poll(key: string, answerId: string, startedUrl: string): Promise<void> {
+  private async poll(key: string, answerId: string, startedScope: string): Promise<void> {
     if (!session.apiKey) return;
 
     for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
       await sleep(POLL_MS);
-      if (this.stale(key, startedUrl)) return;
+      if (this.stale(key, startedScope)) return;
       if (this.drafts[key]?.pendingAnswerId !== answerId) return;
 
       const snapshot = await readAnswer(session.apiKey, answerId);
-      if (this.stale(key, startedUrl)) return;
+      if (this.stale(key, startedScope)) return;
       if (this.drafts[key]?.pendingAnswerId !== answerId) return;
 
       // A transient failure is not a terminal one — keep polling to the cap
@@ -444,6 +473,9 @@ class AnswerDesk {
           ...d,
           pendingAnswerId: null,
           pendingSince: null,
+          // The row this text came from, so the NEXT refine can name it by
+          // reference once the api can take one.
+          answerId: snapshot.id,
           content: snapshot.content,
           status: 'ready',
           // A FRESH generation is never auto-inserted, so there is nothing to
@@ -509,9 +541,21 @@ class AnswerDesk {
     );
   }
 
-  /** Has this draft been superseded, or the page moved out from under it? */
-  private stale(key: string, startedUrl: string): boolean {
-    return startedUrl !== page.url || startedUrl !== this.url || !this.drafts[key];
+  /**
+   * Has this draft been superseded, or the page moved out from under it?
+   *
+   * Scope, not raw URL — a Workday step change must not abandon a generation
+   * that is already running for a question still on screen. Both the live page
+   * AND `this.scope` are checked because `onPageChange` awaits storage between
+   * learning the new URL and adopting it; during that window the two disagree,
+   * and this is the guard that must not be fooled by either half.
+   */
+  private stale(key: string, startedScope: string): boolean {
+    return (
+      startedScope !== draftScopeFor(page.url) ||
+      startedScope !== this.scope ||
+      !this.drafts[key]
+    );
   }
 
   private fail(key: string, message: string): void {
@@ -561,24 +605,24 @@ class AnswerDesk {
 
   private async persist(): Promise<void> {
     this.persistTimer = undefined;
-    const url = this.url;
-    if (!url) return;
+    const scope = this.scope;
+    if (!scope) return;
     try {
       const saved = await chrome.storage.local.get([STORE_KEY]);
       const store = pruneStore(saved[STORE_KEY], Date.now());
-      store[url] = this.drafts;
+      store[scope] = this.drafts;
       await chrome.storage.local.set({ [STORE_KEY]: pruneStore(store, Date.now()) });
     } catch {
       /* the drafts still stand for this session; only their persistence is lost */
     }
   }
 
-  private async readPage(url: string): Promise<Record<string, AnswerDraft>> {
-    if (!url) return {};
+  private async readPage(scope: string): Promise<Record<string, AnswerDraft>> {
+    if (!scope) return {};
     try {
       const saved = await chrome.storage.local.get([STORE_KEY]);
       const store: DraftStore = pruneStore(saved[STORE_KEY], Date.now());
-      return store[url] ?? {};
+      return store[scope] ?? {};
     } catch {
       return {};
     }

@@ -106,15 +106,57 @@ describe('autoInsertDecision', () => {
     if (!decision.insert) expect(decision.reason).toBe('page-changed');
   });
 
-  it('checks the page BEFORE anything else', () => {
-    // Ordering matters: a same-company answer on the wrong page must still be
-    // refused, and must be refused for the right reason.
+  it('page-changed BEATS EVERY OTHER REFUSAL — the ordering is the safety story', () => {
+    // Stack every other refusal on at once: a choice control, text already in
+    // the field, an answer written for a different company, and a token
+    // already delivered. The page check runs first, so the reason must still
+    // be page-changed. If any other check could win, then a rule about THIS
+    // page would be deciding something about ANOTHER page — which is how an
+    // answer written for one employer ends up in another's form.
     const decision = autoInsertDecision(
       input({
-        pageUrl: 'https://elsewhere.example/',
-        source: { sourceCompanyId: 'c1', sourceCompany: 'Acme' },
-        hereCompanyId: 'c1',
+        pageUrl: 'https://elsewhere.example/other',
+        field: choiceField(),
+        source: { sourceCompanyId: 'c1', sourceCompany: 'Stripe' },
+        hereCompanyId: 'c2',
+        deliveredToken: 'cc-tok-1',
       }),
+    );
+    expect(decision.insert).toBe(false);
+    if (!decision.insert) expect(decision.reason).toBe('page-changed');
+  });
+
+  it('allows an insert across a STEP change on the same form', () => {
+    // The other half of the draft-scope fix. A Workday `?step=2` is a position
+    // within one application, not a different page — and the gate must agree
+    // with the store, or it refuses writes for drafts the store just returned.
+    const decision = autoInsertDecision(
+      input({
+        draftUrl: 'https://boards.greenhouse.io/acme/jobs/1/apply',
+        pageUrl: 'https://boards.greenhouse.io/acme/jobs/1/apply?step=2',
+      }),
+    );
+    expect(decision.insert).toBe(true);
+  });
+
+  it('still refuses a DIFFERENT path on the same ATS origin', () => {
+    // Scoping is looser than the raw URL but not loose enough to merge two
+    // employers' forms on one shared ATS host.
+    const decision = autoInsertDecision(
+      input({
+        draftUrl: 'https://boards.greenhouse.io/acme/jobs/1/apply',
+        pageUrl: 'https://boards.greenhouse.io/globex/jobs/9/apply',
+      }),
+    );
+    expect(decision.insert).toBe(false);
+    if (!decision.insert) expect(decision.reason).toBe('page-changed');
+  });
+
+  it('refuses when a URL is unparseable rather than matching another one', () => {
+    // Two empty scopes must not compare equal, or every malformed URL would
+    // be "the same page" as every other malformed URL.
+    const decision = autoInsertDecision(
+      input({ draftUrl: 'not a url', pageUrl: 'not a url' }),
     );
     expect(decision.insert).toBe(false);
     if (!decision.insert) expect(decision.reason).toBe('page-changed');

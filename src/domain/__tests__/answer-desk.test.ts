@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CARRY_DRAFT_IN_PROMPT,
   DRAFT_TTL_MS,
   PENDING_MAX_AGE_MS,
   addInstruction,
   buildEntries,
   composeInjectedPrompt,
+  draftScopeFor,
   extractAnswerRefs,
   isResumable,
   keyOf,
@@ -56,6 +58,60 @@ function draft(over: Partial<AnswerDraft> = {}): AnswerDraft {
     ...over,
   };
 }
+
+describe('draftScopeFor', () => {
+  it('drops the query — `?step=2` is a position in one form, not a new page', () => {
+    // The bug this fixes: Greenhouse, Lever, Ashby and Workday all step
+    // through an application with a query param. Keying on the raw URL means
+    // your drafts vanish at step 2 and the LRU fills with 20 copies of one
+    // form. state/tracked.ts records the identical fix for adoptions.
+    expect(draftScopeFor('https://ats.example/acme/apply?step=2')).toEqual(
+      draftScopeFor('https://ats.example/acme/apply'),
+    );
+  });
+
+  it('drops the fragment — SPA ATSes step with `#/section/`', () => {
+    expect(draftScopeFor('https://ats.example/acme/apply#/section/3')).toEqual(
+      draftScopeFor('https://ats.example/acme/apply'),
+    );
+  });
+
+  it('drops a tracking tag that differs between two arrivals at one posting', () => {
+    expect(draftScopeFor('https://ats.example/acme/apply?gh_src=abc')).toEqual(
+      draftScopeFor('https://ats.example/acme/apply?gh_src=zzz'),
+    );
+  });
+
+  it('treats a trailing slash as the same page', () => {
+    expect(draftScopeFor('https://ats.example/acme/apply/')).toEqual(
+      draftScopeFor('https://ats.example/acme/apply'),
+    );
+  });
+
+  it('keeps DISTINCT paths distinct — this must not over-merge', () => {
+    // The failure in the other direction is worse: two different jobs on one
+    // ATS sharing a draft store would offer Acme's answer on Globex's form.
+    expect(draftScopeFor('https://ats.example/acme/apply')).not.toEqual(
+      draftScopeFor('https://ats.example/globex/apply'),
+    );
+  });
+
+  it('keeps distinct ORIGINS distinct, including scheme and port', () => {
+    expect(draftScopeFor('https://a.example/f')).not.toEqual(
+      draftScopeFor('https://b.example/f'),
+    );
+    expect(draftScopeFor('https://a.example/f')).not.toEqual(
+      draftScopeFor('http://a.example/f'),
+    );
+  });
+
+  it('returns empty for an unparseable URL', () => {
+    // Callers treat '' as "no scope" rather than as a scope that matches every
+    // other unparseable URL — see the autoInsertDecision test for that half.
+    expect(draftScopeFor('not a url')).toBe('');
+    expect(draftScopeFor('')).toBe('');
+  });
+});
 
 describe('questionKey', () => {
   it('is the label and the occurrence, NOT the token', () => {
@@ -220,6 +276,42 @@ describe('composeInjectedPrompt', () => {
     });
     expect(prompt).toContain('Tell us about a project');
     expect(prompt).toContain('The good answer.');
+  });
+
+  it('emits the revise directive ONLY when a draft exists', () => {
+    // A first generation must not be told to "revise the draft below" — there
+    // is no draft, and the directive would be an instruction about nothing.
+    const first = composeInjectedPrompt({
+      instructions: ['Third person'],
+      draft: '',
+      references: [],
+    });
+    expect(first).not.toContain('Revise the draft');
+
+    const refine = composeInjectedPrompt({
+      instructions: ['Third person'],
+      draft: 'the first attempt',
+      references: [],
+    });
+    expect(refine).toContain('Revise the draft');
+  });
+
+  it('carries the draft only while CARRY_DRAFT_IN_PROMPT is on', () => {
+    // The constant is the whole migration seam. When the api grows a proper
+    // "previous answer, revise this" section, flipping it to false is the
+    // change — and this test is what says so out loud rather than leaving the
+    // flag looking decorative.
+    const prompt = composeInjectedPrompt({
+      instructions: ['shorter'],
+      draft: 'the first attempt',
+      references: [],
+    });
+    if (CARRY_DRAFT_IN_PROMPT) {
+      expect(prompt).toContain('the first attempt');
+    } else {
+      expect(prompt).not.toContain('the first attempt');
+      expect(prompt).toContain('shorter');
+    }
   });
 
   it('adds no heading of its own around the instructions', () => {

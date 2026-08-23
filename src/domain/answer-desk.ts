@@ -41,6 +41,14 @@ export interface AnswerDraft {
   /** The Answer we are waiting on, if any. `POST /answers/` returns 202. */
   pendingAnswerId: string | null;
   /**
+   * The last COMPLETED Answer's id — the row `content` came from.
+   *
+   * Carried so a refine can name what it is revising by reference rather than
+   * by quoting it. Nothing sends this yet; see `CARRY_DRAFT_IN_PROMPT` and
+   * `requestAnswer`'s `reviseAnswerId`.
+   */
+  answerId: string | null;
+  /**
    * When that generation was requested.
    *
    * Separate from `at` on purpose. `at` is "last touched" and moves every time
@@ -112,6 +120,38 @@ export const DRAFT_MAX_PAGES = 20;
 export const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 
 /**
+ * The page a draft belongs to: **origin + pathname, nothing else.**
+ *
+ * Keying on the raw URL was wrong and would have failed on every ATS that
+ * matters. Greenhouse, Lever, Ashby and Workday all step through an
+ * application with `?step=`, `?gh_src=` or `#/section/`, so a raw-URL key means
+ * your drafts vanish at step 2 and the LRU fills with twenty copies of one
+ * form — twenty pages of a twenty-page budget, spent on a single application.
+ *
+ * This is the same too-tight page-scoping `state/tracked.ts` already records
+ * fixing for adoptions: *"take one step through an Ashby form and the adoption
+ * is gone."* Same mistake, same shape, one rung down.
+ *
+ * The query string is dropped rather than normalised because no part of it is
+ * identity here. `?step=2` is a position within one form, and `?gh_src=` is a
+ * tracking tag that differs between two arrivals at the same posting.
+ *
+ * Returns `''` for anything unparseable, and callers treat that as "no scope"
+ * rather than as a scope that matches other unparseable URLs — see
+ * `autoInsertDecision`, which refuses on it.
+ */
+export function draftScopeFor(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // A trailing slash is not a different page. `/apply` and `/apply/` are one
+    // form, and an ATS will happily serve both.
+    return parsed.origin + parsed.pathname.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * A draft's identity: **the label and which occurrence of it this is.**
  *
  * NOT the `data-cc-field` token. Tokens are regenerated on every scan and die
@@ -172,6 +212,7 @@ export function newDraft(field: PageQuestion, now: number): AnswerDraft {
     questionId: null,
     pendingAnswerId: null,
     pendingSince: null,
+    answerId: null,
     content: '',
     instructions: [],
     input: '',
@@ -253,6 +294,31 @@ export function extractAnswerRefs(
   return out;
 }
 
+/**
+ * Does the refine turn carry the previous draft inside `injected_prompt`?
+ *
+ * **THIS IS A WORKAROUND FOR A SERVER GAP, AND IT IS NAMED SO IT CAN BE
+ * DELETED IN ONE LINE.**
+ *
+ * `AnswerService.load_context_for_question` builds the Q&A history from
+ * `question__created_by_id=user.id, favorite=True` and then
+ * `.exclude(id=question.id)`. So the draft being revised is excluded twice —
+ * once for being this question's, once for not being favourited — and the
+ * section it would otherwise land in is labelled
+ * `"## Q&A History (for reference style and tone only — do NOT answer these)"`.
+ *
+ * The consequence is not subtle: without this, the model never sees the text it
+ * is being asked to revise, so "make it shorter" is an instruction with no
+ * antecedent and it regenerates from scratch instead.
+ *
+ * The cost of the workaround is real and worth stating: the draft rides under a
+ * heading that calls it an instruction, and it is re-sent in full every turn.
+ * When the api grows a proper "here is the previous answer, revise it" section,
+ * flip this to `false` and pass `reviseAnswerId` instead — `requestAnswer`
+ * already takes it.
+ */
+export const CARRY_DRAFT_IN_PROMPT = true;
+
 export interface PromptParts {
   /** The instruction stack, oldest first. All of it stays in force. */
   instructions: string[];
@@ -283,7 +349,10 @@ export interface PromptParts {
  */
 export function composeInjectedPrompt(parts: PromptParts): string | null {
   const instructions = parts.instructions.map((i) => i.trim()).filter(Boolean);
-  const draft = parts.draft.trim();
+  // The one place the workaround is switched. With it off, a refine sends its
+  // instructions and nothing else, and the server is expected to supply the
+  // draft from `reviseAnswerId`.
+  const draft = CARRY_DRAFT_IN_PROMPT ? parts.draft.trim() : '';
   if (!instructions.length && !draft && !parts.references.length) return null;
 
   const sections: string[] = [];

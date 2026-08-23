@@ -157,6 +157,22 @@ export type RequestAnswerResult =
   | { ok: true; answerId: string }
   | { ok: false; error: string };
 
+export interface RequestAnswerOptions {
+  /** The PRIORITY override. Omitted when null. */
+  injectedPrompt?: string | null;
+  /**
+   * The Answer this one revises.
+   *
+   * **Accepted here and deliberately NOT put on the wire yet** — the api has no
+   * field for it, and sending an attribute the serializer ignores would look
+   * like a working contract while changing nothing. It is in the signature now,
+   * while there is exactly one call site, so that adopting the real contract is
+   * a one-line diff in this function rather than a change that ripples back
+   * through the state layer. See `CARRY_DRAFT_IN_PROMPT`.
+   */
+  reviseAnswerId?: string | null;
+}
+
 /**
  * Ask for an AI answer. Returns 202 and a pending Answer to poll.
  *
@@ -164,14 +180,20 @@ export type RequestAnswerResult =
  * It is omitted entirely when null rather than sent as an empty string, which
  * would render an empty PRIORITY section, i.e. tell the model its
  * highest-priority directive is blank.
+ *
+ * An options object rather than positional args, chosen while the call count is
+ * one: the next parameter this grows is a server-side revise reference, and a
+ * third boolean-ish positional would be unreadable at the call site.
  */
 export async function requestAnswer(
   apiKey: string,
   questionId: string,
-  injectedPrompt: string | null,
+  options: RequestAnswerOptions = {},
 ): Promise<RequestAnswerResult> {
+  const { injectedPrompt = null } = options;
   const attributes: Record<string, unknown> = { ai_assist: true };
   if (injectedPrompt) attributes['injected_prompt'] = injectedPrompt;
+  // `options.reviseAnswerId` is intentionally unread — see the type above.
 
   const resp = await request<JsonApiDoc<AnswerAttrs>>('/api/v1/answers/', {
     method: 'POST',
