@@ -15,14 +15,23 @@ import { page } from './page.ts';
 import { session } from './session.ts';
 import { trackedPost } from './tracked.ts';
 import { loadViewed } from './viewed.ts';
+import { clearStashForPost, findStashMatch, postFromStash } from './apply-stash.ts';
+import { isConfident } from '../domain/apply-stash.ts';
 
 /**
  * Which job post does THIS page belong to, when its URL matches nothing?
  *
  * Runs when the by-link lookup comes back empty — which is the normal case on
  * an application form, because forms live at different URLs than the
- * descriptions they belong to. Six tiers, FIRST MATCH WINS, cheapest and most
- * certain first.
+ * descriptions they belong to. FIRST MATCH WINS, cheapest and most certain
+ * first: T0 stash · T1 opener · T2 open tabs · T3 referrer · T4 id token ·
+ * T5 title · T5b stash (origin-only) · T6 viewed trail.
+ *
+ * T0/T5b are the SAME evidence at two strengths, which is why the apply stash
+ * appears twice. A stash entry whose path agrees with this page is the
+ * strongest thing the ladder has — you said so yourself — while a bare origin
+ * match on a shared ATS is among the weakest. Running it once at either
+ * position would be wrong in one direction or the other.
  *
  * The evidence rules are in domain/ladder.ts and are unit-tested. This file is
  * the ORDERING and the I/O: which tier runs when, what it costs, and when to
@@ -112,6 +121,21 @@ class LadderRunner {
     };
 
     try {
+      // --- T0: an application you explicitly tracked ----------------------
+      // The only tier backed by a USER ACTION rather than an inference: you
+      // pressed Track on a post whose apply link points at this site. It runs
+      // first because it is both the most direct and the only free tier — a
+      // local storage read, no server round-trip, no permission needed.
+      //
+      // Accepted here ONLY when the paths agree. A bare origin match on a
+      // multi-tenant ATS says almost nothing (see isConfident), so it is held
+      // back to T5b instead of being allowed to beat the verified tiers below.
+      const stashHit = await findStashMatch(page.url);
+      if (stale()) return;
+      if (stashHit && isConfident(stashHit)) {
+        return settle(postFromStash(stashHit.entry), 'an application you tracked');
+      }
+
       const tabsGranted = await this.hasTabs();
       if (stale()) return;
       const tabId = page.tabId;
@@ -188,6 +212,16 @@ class LadderRunner {
         }
       }
 
+      // --- T5b: the stash again, origin-only — TENTATIVE -------------------
+      // Held back from T0 because the paths disagreed. Still worth offering:
+      // you tracked an application on this ATS within the last six hours, and
+      // that is a better guess than nothing. It outranks T6 because a tracked
+      // application is something you DID, where the viewed trail is only
+      // something you looked at.
+      if (stashHit) {
+        return settle(postFromStash(stashHit.entry), 'an application you tracked', true);
+      }
+
       // --- T6: the recently-viewed trail — TENTATIVE ----------------------
       // Live as of the CCEXT-52 triage. The trail is state/viewed.ts; the
       // rule that reads it (pickFromTrail — CROSS-ORIGIN ONLY, per the Toptal
@@ -210,6 +244,11 @@ class LadderRunner {
   /** Accept the offer: adopt it as this page's post. */
   accept(): void {
     if (!this.found) return;
+    // The stash exists to reconnect a tracked application to its apply page.
+    // Once you have confirmed the connection, its job is done — leaving the
+    // entry behind would keep re-offering a post already adopted here, and
+    // would still be doing it on the next unrelated job at the same ATS.
+    void clearStashForPost(this.found.id);
     trackedPost.adopt(this.found);
     this.reset();
   }

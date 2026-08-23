@@ -20,11 +20,16 @@ This is the checklist instead. Source of truth is frontend commit `95aad96^`
 | | Count | |
 |---|---|---|
 | DOM plumbing — genuinely deleted by Glimmer | 55 | `show*`/`hide*`/`render*`/`reset*Card`/`setStatus` — `{{#if}}` and `{{#each}}` replace these outright |
-| Ported | 45 | |
-| **Not yet ported** | **71** | |
+| Ported | 76 | |
+| **Not yet ported** | **40** | |
 
-Excluding the 55 the framework deletes, that is **45 of 116 real functions
-done — 39%.**
+Excluding the 55 the framework deletes, that is **76 of 116 real functions
+done — 66%.**
+
+Of the 40 left, **20 are the answer desk** (CCEXT-45), deliberately deferred
+behind "functionality and form convergence first". The other 20 are spread
+across the four sections below and counted per-section there — the ✅ marks are
+the source of this table, so recount them rather than trusting the number.
 
 ## Not yet ported, by subsystem
 
@@ -77,7 +82,7 @@ prefixes, host agreement and title similarity. CCEXT-32 replaced a
 first-tier-wins ladder with aggregated scoring. The `match-result-*` and
 `ladder-offer-*` element ids are only its UI.
 
-### Apply attribution — 9 functions (CCEXT-51, **HALF DONE**)
+### Apply attribution — 9 functions (CCEXT-51, **DONE**)
 
 **Done — the passive half, `state/apply-backfill.ts`:**
 `maybeBackfillApplyUrl` ✅ — lands on a tracked page whose post has no
@@ -90,14 +95,37 @@ Also extracted `state/hints.ts` on the way — hint collection had been private
 to SendCard, and the backfill needed the same question asked the same way. Two
 copies of a rule is how this repo got two JobPost mappers that could disagree.
 
-**Remaining — the active half (the stash):**
-`maybeOfferApplyAttribution` `confirmApplyAttribution` `backfillApplyUrlFor`
-`findFreshApplyStash` `loadApplyStash` `saveApplyStash` `stashPendingApply`
-`clearApplyStashForJobPost`
+**Done — the active half, `domain/apply-stash.ts` + `state/apply-stash.ts`:**
+`loadApplyStash` ✅ `saveApplyStash` ✅ `stashPendingApply` ✅
+`clearApplyStashForJobPost` ✅ `findFreshApplyStash` ✅ (14 tests)
+`backfillApplyUrlFor` ✅ — already covered by `state/apply-backfill.ts`.
 
 Constants read from the legacy, not invented: `APPLY_STASH_MAX = 5`,
 `APPLY_STASH_TTL_MS = 6h`, deduped by **origin** (not by URL) so one entry
 survives per ATS you bounced through.
+
+**`maybeOfferApplyAttribution` / `confirmApplyAttribution` are ported as a
+LADDER TIER, not as a card** — the one deliberate shape change in this cluster.
+
+The legacy needed its own card because the popup had no ladder when this was
+written and no other surface could ask "which post is this?". The panel does,
+and the stash is a textbook answer to exactly that question — so it enters as
+`T0` (paths agree) and `T5b` (origin-only, tentative) and comes out through the
+existing `<LadderOffer>`. Accepting adopts the post; `ApplicationCard`'s dedupe
+lookup then surfaces the already-tracked application on its own, which is what
+the legacy card was hand-rolling.
+
+Same evidence at two positions is not hedging. A stash hit whose path agrees is
+the strongest signal the ladder has — you *said* so. A bare origin match on a
+shared ATS is among the weakest, and is the same shape as the Toptal misfire
+`pickFromTrail` refuses outright. Running it once at either end would be wrong
+in one direction or the other.
+
+**Why this cluster was nearly dead code, and why it is worth having now:**
+`stashPendingApply` fires only when the post has an `apply_url` — true for ~3
+of the 100 most recent posts, because the extension-direct send path drops
+`captured_payload.apply_url` entirely. api #253 and `state/apply-backfill.ts`
+both close that. The stash is about to start firing for the first time.
 
 **Original notes:**
 `maybeOfferApplyAttribution` `confirmApplyAttribution` `backfillApplyUrlFor`

@@ -4,6 +4,7 @@ import { page } from './page.ts';
 import { session, KEYS } from './session.ts';
 import { errorLog } from './errors.ts';
 import { trackedPost } from './tracked.ts';
+import { stashPendingApply } from './apply-stash.ts';
 
 /**
  * "I applied to this one."
@@ -191,6 +192,16 @@ class ApplicationState {
     this.appId = created.appId;
     this.status = 'Tracked';
     await writeCheck(post.id, created.appId);
+
+    // Remember the intention. Tracking does NOT open the apply page — the
+    // application is recorded in place — so if you walk to the ATS yourself
+    // later, nothing on that page connects it back to this post. The stash is
+    // what lets the ladder recognise it (see domain/apply-stash.ts).
+    //
+    // Only meaningful when the post has an apply_url, which is why this feature
+    // has barely ever fired: the send path dropped it. That is now being fixed
+    // on both sides (api #253, and state/apply-backfill.ts here).
+    stashPendingApply(post);
   }
 }
 

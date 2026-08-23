@@ -26,6 +26,7 @@ export const KEYS = {
   trackedPages: 'ccTrackedPages',
   viewedPosts: 'ccViewedPosts',
   appChecks: 'ccAppChecks',
+  pendingApplies: 'ccPendingApplies',
 } as const;
 
 /**
@@ -49,6 +50,7 @@ export const USER_SCOPED_STORAGE_KEYS: readonly string[] = [
   KEYS.trackedPages,
   KEYS.viewedPosts,
   KEYS.appChecks,
+  KEYS.pendingApplies,
   'ccSentPages',
   KEYS.matchApps,
   'ccAnswerDrafts',
