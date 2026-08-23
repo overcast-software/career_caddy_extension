@@ -76,6 +76,7 @@ const POLL_PERIOD_MIN = 0.5;
 /** ~10 minutes. A scrape that has not finished by then is not going to. */
 const MAX_POLLS = 20;
 const ALARM_PREFIX = 'cc-scrape-poll-';
+const SCORE_PREFIX = 'cc-score-poll-';
 const LINKS_KEY = 'ccNotifyLinks';
 
 const ORIGIN = 'https://careercaddy.online';
@@ -84,6 +85,22 @@ const TERMINAL = new Set(['completed', 'failed', 'error', 'cancelled']);
 interface WatchCtx {
   scrapeId: string;
   url: string;
+  polls: number;
+  /**
+   * Scoring is the worker's job on the fast path, not the server's.
+   * `/scrapes/from-text/` accepts an `auto_score` flag; the extension-direct
+   * POST to `/scrapes/` does NOT — it is not a parameter that endpoint has.
+   * So the checkbox was silently doing nothing for every send that took the
+   * fast path, which is every send with readable text. The worker closes that
+   * by starting the score itself once the post exists.
+   */
+  autoScore: boolean;
+}
+
+interface ScoreCtx {
+  scoreId: string;
+  jobPostId: string;
+  title: string;
   polls: number;
 }
 
@@ -151,9 +168,16 @@ function jobPostUrl(jobPostId: string | null, scoreId: string | null): string | 
 
 /** The panel asks for a watch; it does NOT hand over the credential. */
 chrome.runtime.onMessage.addListener((msg: unknown) => {
-  const m = msg as { type?: string; scrapeId?: string; url?: string } | null;
+  const m = msg as
+    | { type?: string; scrapeId?: string; url?: string; autoScore?: boolean }
+    | null;
   if (!m || m.type !== 'cc-watch-scrape' || !m.scrapeId) return false;
-  const ctx: WatchCtx = { scrapeId: String(m.scrapeId), url: m.url ?? '', polls: 0 };
+  const ctx: WatchCtx = {
+    scrapeId: String(m.scrapeId),
+    url: m.url ?? '',
+    polls: 0,
+    autoScore: m.autoScore === true,
+  };
   void chrome.storage.session
     .set({ [ALARM_PREFIX + ctx.scrapeId]: ctx })
     .then(() =>
@@ -176,9 +200,134 @@ async function stopWatch(scrapeId: string): Promise<void> {
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (!alarm.name.startsWith(ALARM_PREFIX)) return;
-  void pollOnce(alarm.name.slice(ALARM_PREFIX.length));
+  if (alarm.name.startsWith(ALARM_PREFIX)) {
+    void pollOnce(alarm.name.slice(ALARM_PREFIX.length));
+  } else if (alarm.name.startsWith(SCORE_PREFIX)) {
+    void pollScore(alarm.name.slice(SCORE_PREFIX.length));
+  }
 });
+
+async function apiKey(): Promise<string | undefined> {
+  try {
+    const local = await chrome.storage.local.get(['ccApiKey']);
+    return local['ccApiKey'] as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Start a score and begin watching it. Returns false if it could not start,
+ * so the caller can fall back to announcing the post on its own rather than
+ * leaving the user with no notification at all.
+ */
+async function beginScore(jobPostId: string, title: string): Promise<boolean> {
+  const key = await apiKey();
+  if (!key) return false;
+  try {
+    const resp = await fetch(`${ORIGIN}/api/v1/scores/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'scores',
+          relationships: {
+            'job-post': { data: { type: 'job-posts', id: String(jobPostId) } },
+          },
+        },
+      }),
+    });
+    if (!resp.ok) return false;
+    const body = (await resp.json()) as { data?: { id?: string } };
+    const scoreId = body.data?.id ? String(body.data.id) : '';
+    if (!scoreId) return false;
+
+    const ctx: ScoreCtx = { scoreId, jobPostId, title, polls: 0 };
+    await chrome.storage.session.set({ [SCORE_PREFIX + scoreId]: ctx });
+    await chrome.alarms.create(SCORE_PREFIX + scoreId, {
+      periodInMinutes: POLL_PERIOD_MIN,
+      delayInMinutes: POLL_PERIOD_MIN,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function pollScore(scoreId: string): Promise<void> {
+  const key = SCORE_PREFIX + scoreId;
+  let ctx: ScoreCtx | undefined;
+  try {
+    const session = await chrome.storage.session.get([key]);
+    ctx = session[key] as ScoreCtx | undefined;
+  } catch {
+    return;
+  }
+  const token = await apiKey();
+  if (!ctx || !token) {
+    await stopAlarm(key);
+    return;
+  }
+
+  ctx.polls += 1;
+  if (ctx.polls > MAX_POLLS) {
+    await stopAlarm(key);
+    return;
+  }
+  try {
+    await chrome.storage.session.set({ [key]: ctx });
+  } catch {
+    /* best-effort */
+  }
+
+  let status: string | undefined;
+  let value: number | null = null;
+  try {
+    const resp = await fetch(`${ORIGIN}/api/v1/scores/${scoreId}/`, {
+      headers: {
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) await stopAlarm(key);
+      return;
+    }
+    const body = (await resp.json()) as {
+      data?: { attributes?: { status?: string; score?: number | null } };
+    };
+    status = body.data?.attributes?.status;
+    const raw = body.data?.attributes?.score;
+    value = typeof raw === 'number' ? raw : null;
+  } catch {
+    return;
+  }
+
+  if (status !== 'completed' && status !== 'failed') return;
+  await stopAlarm(key);
+
+  // As deep as the ids allow — straight to THIS score, not the scores list.
+  const url = jobPostUrl(ctx.jobPostId, scoreId);
+  if (status === 'failed') {
+    await notify('Career Caddy — added ✓ (score failed)', ctx.title, jobPostUrl(ctx.jobPostId, null));
+    return;
+  }
+  const pct = value === null ? '' : ` ${value <= 1 ? Math.round(value * 100) : Math.round(value)}%`;
+  await notify(`Career Caddy — scored${pct} ✓`, ctx.title, url);
+}
+
+async function stopAlarm(key: string): Promise<void> {
+  try {
+    await chrome.alarms.clear(key);
+    await chrome.storage.session.remove([key]);
+  } catch {
+    /* nothing to clean */
+  }
+}
 
 async function pollOnce(scrapeId: string): Promise<void> {
   const key = ALARM_PREFIX + scrapeId;
@@ -260,11 +409,21 @@ async function pollOnce(scrapeId: string): Promise<void> {
     return;
   }
 
-  await notify(
-    'Career Caddy',
-    host ? `Added the posting from ${host}.` : 'Added the posting.',
-    jobPostUrl(jobPostId, null),
-  );
+  const title = host ? `Added the posting from ${host}.` : 'Added the posting.';
+
+  // Two notifications, matching the rhythm the legacy established and the one
+  // Doug expects: "added" now, "scored" when the score lands. If scoring
+  // cannot start, say "added" and stop — silence would be worse.
+  if (ctx.autoScore && jobPostId) {
+    await notify('Career Caddy — added ✓', title, jobPostUrl(jobPostId, null));
+    const started = await beginScore(jobPostId, title);
+    if (!started) {
+      await notify('Career Caddy — added ✓ (could not start scoring)', title, jobPostUrl(jobPostId, null));
+    }
+    return;
+  }
+
+  await notify('Career Caddy — added ✓', title, jobPostUrl(jobPostId, null));
 }
 
 function hostOf(url: string): string {

@@ -314,6 +314,11 @@ export default class SendCard extends Component {
           type: 'cc-watch-scrape',
           scrapeId: this.scrapeId,
           url: payload.url,
+          // The fast path has no server-side auto_score — that flag only
+          // exists on /scrapes/from-text/. The worker starts the score once
+          // the post exists, which is also what makes it survive the panel
+          // being closed.
+          autoScore: this.autoScore,
         });
       } catch {
         /* no worker (e.g. rendered outside an extension context) */
