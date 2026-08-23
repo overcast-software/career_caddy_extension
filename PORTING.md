@@ -37,7 +37,20 @@ done — 39%.**
 `saveAnswerResult` `clearAnswerPending` `copyAnswerToClipboard` `answerSleep`
 `handleAskAgent`
 
-### Signal ladder / match application — 22 functions (NOT previously scoped)
+### Signal ladder / match application — 22 functions (CCEXT-50, IN PROGRESS)
+
+**Done — pure layer, `domain/ladder.ts`, 33 tests:**
+`bareHost` ✅ `originOf` ✅ `collectIdTokens` ✅ `pathPrefixScore` ✅
+`normalizeTitle` ✅ `titlesMatch` ✅ `hostAgrees` ✅ `pickPageTitle` ✅
+(plus `verifyByToken` / `verifyByTitle` / `pickFromTrail`, extracted from
+`runSignalLadder`'s inline filters so the verification rules are testable)
+
+**Correction made while porting:** this ladder is **first-tier-wins**, not
+aggregated scoring. CCEXT-32 proposes aggregation and is still Todo — a
+proposal, not shipped behaviour. Building from the ticket instead of the
+source would have produced a system that never existed, labelled a port.
+
+**Remaining:**
 `runSignalLadder` `grabLadderSignals` `maybeOfferFromLadder`
 `renderLadderOffer` `confirmLadderOffer` `postMatchApplication`
 `pollMatchApplicationOnce` `pollMatchAppOnce` `armMatchAppBackground`
