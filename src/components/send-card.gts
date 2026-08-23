@@ -195,7 +195,13 @@ export default class SendCard extends Component {
    * goes through here so none can silently record only half.
    */
   private fail(message: string): void {
-    this.fail(message);
+    // Write the fields directly. This method is the ONE place allowed to,
+    // and it must not go through any helper — an earlier regex refactor
+    // rewrote this body into `this.fail(message)`, because it contained the
+    // exact two-line pattern the regex was collapsing. Every failure then
+    // blew the stack, and the error log this exists to feed recorded nothing.
+    this.kind = 'error';
+    this.status = message;
     errorLog.record('send', message, page.host);
   }
 
