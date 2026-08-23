@@ -41,6 +41,17 @@ export type PickerState = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 class LinkPickerState {
   @tracked state: PickerState = 'idle';
   @tracked results: JobPost[] = [];
+  /**
+   * The query `results` were fetched FOR.
+   *
+   * Rows render only when this equals the live query, which makes "results
+   * that do not match the box" structurally impossible rather than merely
+   * unlikely. The ticket guard already stops a stale RESPONSE from being
+   * assigned; this stops a stale ASSIGNMENT from being displayed — a
+   * different failure, and the one actually seen: the box read "ticktok"
+   * while the list still showed matches for "tick".
+   */
+  @tracked resultsQuery: string | null = null;
   @tracked query = '';
   @tracked status = '';
   @tracked statusIsError = false;
@@ -109,7 +120,21 @@ class LinkPickerState {
     }
 
     this.results = posts;
+    this.resultsQuery = query;
     this.state = posts.length ? 'ready' : 'empty';
+  }
+
+  /**
+   * Do the rows on screen actually answer the query in the box?
+   *
+   * False while a keystroke is outstanding — the debounce window, the fetch,
+   * or anything that leaves the two out of step. Showing rows during that gap
+   * is what made a search for "ticktok" display a Labcorp job matching an
+   * earlier "tick": every individual step was correct, and the composition
+   * still lied.
+   */
+  get resultsAreCurrent(): boolean {
+    return this.resultsQuery === this.query;
   }
 
   /** True when a click on this row would need a second click to confirm. */
@@ -174,6 +199,7 @@ class LinkPickerState {
     if (this.debounceTimer !== null) window.clearTimeout(this.debounceTimer);
     this.state = 'idle';
     this.results = [];
+    this.resultsQuery = null;
     this.query = '';
     this.status = '';
     this.pendingOverwriteId = null;

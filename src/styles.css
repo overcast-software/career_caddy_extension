@@ -647,3 +647,4 @@ h1 {
 .lp__title { display: block; font-size: 12px; font-weight: 600; line-height: 1.35; }
 .lp__company { display: block; font-size: 11px; color: var(--text-muted); }
 .lp__warn { display: block; margin-top: 2px; font-size: 10px; color: var(--error); }
+.lp__note { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }

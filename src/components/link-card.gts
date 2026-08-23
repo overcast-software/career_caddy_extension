@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { linkPicker } from '../state/link-picker.ts';
+import { trackedPost } from '../state/tracked.ts';
 import type { JobPost } from '../domain/job-post.ts';
 
 /**
@@ -19,6 +20,23 @@ import type { JobPost } from '../domain/job-post.ts';
 export default class LinkCard extends Component {
   get picker(): typeof linkPicker {
     return linkPicker;
+  }
+
+  get tracked(): typeof trackedPost {
+    return trackedPost;
+  }
+
+  /**
+   * The page is already in the library, so this picker would REPOINT an
+   * existing link rather than create one.
+   *
+   * Demoted with a caption, not hidden. Hiding a card because the app thinks
+   * it already has the answer is the mistake Send made — "I should have been
+   * granted an opportunity to use ext sender" — and the app's answer is
+   * exactly what a user reaches for this to correct.
+   */
+  get alreadyKnown(): boolean {
+    return trackedPost.isKnown;
   }
 
   onInput = (event: Event): void => {
@@ -44,7 +62,20 @@ export default class LinkCard extends Component {
   <template>
     {{#if this.picker.canLink}}
     <details class="lp" {{on "toggle" this.onToggle}}>
-      <summary class="lp__summary">Link this page to a job post</summary>
+      <summary class="lp__summary">
+        {{#if this.alreadyKnown}}
+          Link this page to a different job post
+        {{else}}
+          Link this page to a job post
+        {{/if}}
+      </summary>
+
+      {{#if this.alreadyKnown}}
+        <p class="lp__note">
+          This page is already linked to
+          “{{this.tracked.post.title}}”. Picking another post repoints it.
+        </p>
+      {{/if}}
 
       <input
         type="search"
@@ -60,7 +91,9 @@ export default class LinkCard extends Component {
         </p>
       {{/if}}
 
-      {{#if (is this.picker.state "loading")}}
+      {{#if (isSearching this.picker.state this.picker.resultsAreCurrent)}}
+        {{! Also covers the gap between a keystroke and its fetch, when the
+            rows on screen still answer the PREVIOUS query. }}
         <p class="lp__empty">Searching…</p>
       {{else if (is this.picker.state "empty")}}
         {{! Deliberately different words for "your search matched nothing" and
@@ -102,6 +135,11 @@ export default class LinkCard extends Component {
 
 function is(state: string, want: string): boolean {
   return state === want;
+}
+
+/** Searching, OR showing rows that answer a query the user has moved past. */
+function isSearching(state: string, resultsAreCurrent: boolean): boolean {
+  return state === 'loading' || (state === 'ready' && !resultsAreCurrent);
 }
 
 function errorClass(isError: boolean): string {
