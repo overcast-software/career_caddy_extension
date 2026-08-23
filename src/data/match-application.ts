@@ -56,7 +56,17 @@ export async function createMatchApplication(
 }
 
 export interface MatchOutcome {
-  /** The matcher's own status, from match_context. Null while it has not run. */
+  /**
+   * The matcher's own status, from `match_context`.
+   *
+   * The api emits exactly three — `pending` / `done` / `failed`
+   * (`models/job_application.py:43-45`). `done` is terminal WITH OR WITHOUT a
+   * pick: a search that found nothing is `done` with a null job-post and
+   * rationale "no candidates". There is no `no_match`; waiting for one is how
+   * a finished search looked like a hung one.
+   *
+   * Null while the matcher has not started.
+   */
   status: string | null;
   confidence: number | null;
   rationale: string;

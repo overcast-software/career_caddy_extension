@@ -160,9 +160,23 @@ class MatchAppRunner {
       await this.clearStash(page.url);
       return;
     }
-    if (outcome && (outcome.status === 'failed' || outcome.status === 'no_match')) {
+    // `done` is the terminal status, with or without a pick.
+    //
+    // This waited for `'no_match'`, WHICH THE API NEVER EMITS. The matcher
+    // reports `pending` / `done` / `failed` (models/job_application.py:43-45),
+    // and a real "searched, found nothing" is `done` with a null job_post and
+    // rationale "no candidates". So that outcome fell through this branch,
+    // kept polling, and timed out saying "Still looking — it will be here when
+    // you come back" when the answer had already arrived and was "no".
+    //
+    // The `found` check above handles `done` WITH a pick, so reaching here on
+    // `done` means the search finished empty.
+    if (outcome && (outcome.status === 'failed' || outcome.status === 'done')) {
       this.state = 'nomatch';
-      this.status = 'Career Caddy could not identify the posting.';
+      this.status =
+        outcome.status === 'failed'
+          ? 'Career Caddy could not run the search.'
+          : 'Career Caddy could not identify the posting.';
       this.rationale = outcome.rationale;
       await this.clearStash(page.url);
       return;
