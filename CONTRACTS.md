@@ -3,9 +3,17 @@
 **Why this file exists.** The rewrite was being built against an api mapped
 only where it had been tripped over. In one session, each of these arrived as a
 surprise *after* a live test failed: `auto_score` silently ignored on the fast
-path; `is_known_good` not deployed; `filter[...]` ignored by `ScrapeViewSet`;
-`apply_url` present on 3 of 100 recent posts; `filter[link]` secretly matching
-`apply_url` too.
+path; `is_known_good` not deployed; `apply_url` present on 3 of 100 posts;
+`filter[link]` secretly matching `apply_url` too.
+
+One item on that list turned out to be **wrong, and mine**: I also claimed
+`ScrapeViewSet` silently ignored every `filter[...]`. It never did — it
+hand-rolls `list()` and has honoured `filter[status]`, `filter[job_post_id]`,
+`filter[has_score]` and `filter[query]` since 2026-04-16. I concluded it from
+the absence of `filterset_fields` / `filter_backends`, but **no viewset in this
+codebase uses DRF's filter machinery**, so that grep false-negatives on every
+file in the package. The claim propagated into a claudex memory another agent
+relied on before being caught. Retracted here and there.
 
 `PORTING.md` fixed this for the legacy source. This is the same fix for the
 server boundary: **coverage bounded by what you trip over is not coverage.**
