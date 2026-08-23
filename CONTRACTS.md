@@ -1,5 +1,12 @@
 # API contracts — what the extension sends, what the server honours
 
+> **Status, 2026-08-23.** Three divergences have since been closed: **#6**
+> (readiness in `data.attributes`, api `b2d931d`), **#1** (`canonical_link_hint`
+> + `referrer_url` honoured on extension-direct) and the `apply_url` half of
+> **#H** — both api `16dc923`. Struck-through verdicts below are kept rather
+> than deleted, because *what the server used to do* is what explains the data
+> already in the library. See the divergence ledger at the end for what remains.
+
 **Why this file exists.** The rewrite was being built against an api mapped
 only where it had been tripped over. In one session, each of these arrived as a
 surprise *after* a live test failed: `auto_score` silently ignored on the fast
@@ -58,18 +65,26 @@ the browser tier. Verified by reading `views/scrapes.py:639-790`, not inferred:
 
 | The extension sends / expects | On the Tier-0 fast path |
 |---|---|
-| `captured_payload.apply_url` | **NEVER READ.** `_parsed_job_data_from_payload` reads exactly four keys — title, company, description, location (`scrapes.py:680-689`). The only occurrence of `apply_url` in the whole 150-line consume path is inside a *docstring* at `:719`. |
+| `captured_payload.apply_url` | ~~**NEVER READ.**~~ **FIXED — api `16dc923` (#253 / BACK-131), merged 2026-08-23.** Was: `_parsed_job_data_from_payload` read exactly four keys — title, company, description, location — and the only occurrence of `apply_url` in the whole consume path was inside a *docstring*. Now stamped by `_stamp_apply_url` on the Tier-0 hit, and forwarded as `apply_url=` to `parse_scrape_job` on the Tier-0 miss, so both tiers write the same row. |
 | closed-posting detection | **DEAD.** `create_kwargs` (`:573-586`) never sets `job_content`, so `raw_source` is `""` in `process_evaluation` and BOTH legacy detection channels are guarded off (`job_post_extractor.py:726`, `:746`). |
 | completeness review | **NEVER RUNS.** `_consume_extension_direct_payload` calls `process_evaluation` directly (`:764`); the reviewer's only two call sites are `parse_scrape` and `persist_extraction`. |
 | `html` for selector discovery | **Never persisted** — breaks `inspect_scrape_html` and `find_selectors_for_text`. |
 | tier ladder, JSON-LD, screenshots, `ResolveApplyUrl`, `UpdateProfile` learning | **None of it.** Extension-direct scrapes never reach `status='hold'`, so `claim_next` never claims them and the graph never sees them. |
 | `scraped_at` | Null — the completion writes `save(update_fields=["status"])` (`:769`), bypassing the stamp in `pre_save_payload`. |
 
-**This is the answer to "why do only 3 of 100 posts have an `apply_url`."**
-There are five writers of that column and the fast path is none of them. The
-route that DOES honour `apply_url` is `from-text` — which CC-176 made
-unreachable for any page with text. The remaining few are almost certainly the
+**This WAS the answer to "why do only 3 of 100 posts have an `apply_url`."**
+There were five writers of that column and the fast path was none of them. The
+only route that honoured `apply_url` was `from-text` — which CC-176 made
+unreachable for any page with text. The remaining few were almost certainly the
 link picker, which is user-driven.
+
+**Closed on both sides, 2026-08-23.** api `16dc923` makes extension-direct
+honour it, and the extension gained two more writers of its own: a passive
+backfill (`state/apply-backfill.ts`) that fills an empty field on any tracked
+page, and an `isAuthWall` guard so neither writer can record a sign-in page —
+`linkedin.com/signup/cold-join` is already in the library as an `apply_url`,
+which is what that guard exists to stop happening again. **The 3-of-100 number
+is now historical; re-measure before citing it.**
 
 **Neither unmerged PR (api #250, agents #63) touches this path.** #250's
 refusal validator never fires on Tier 0 because that branch already gates on
@@ -189,17 +204,34 @@ apply_url, canonical_link_hint, referrer_url, structured_prefill
 > `referrer_url` **top-level**. extension-direct nests them under
 > `captured_payload.extraction_hints`. Same three fields, two shapes.
 >
-> **Verdict: BOTH SHAPES ARE READ — but not the same fields.**
+> **Verdict: ~~BOTH SHAPES ARE READ — but not the same fields.~~ RESOLVED —
+> api `16dc923` (#253 / BACK-131), merged 2026-08-23.**
 >
-> `from_text` reads all three top-level (`scrapes.py:1046-1057`).
-> extension-direct reads `captured_payload.extraction_hints` at `:671` and
-> `:822` — **but only `structured_prefill`.**
+> Was: `from_text` read all three top-level (`scrapes.py:1046-1057`), while
+> extension-direct read `captured_payload.extraction_hints` — **but only
+> `structured_prefill`**, silently dropping `canonical_link_hint` and
+> `referrer_url`. The extension built them and nothing read them, which killed
+> LinkedIn `og:url` canonicalization and referrer→ATS click-through pairing:
+> both real features with server support, inert in practice.
 >
-> So `canonical_link_hint` and `referrer_url` **are silently dropped on the
-> fast path.** The extension builds them (`send-gate.ts:126-127`) and nothing
-> reads them. That kills LinkedIn `og:url` canonicalization and the
-> referrer→ATS click-through pairing — both real features with server support,
-> inert in practice.
+> Now both are read on extension-direct. They are applied at **create** time,
+> so they cover both tiers without branch-specific plumbing. All three hints
+> drop-on-invalid rather than 4xx via a shared `_clean_hint_url`, which
+> `from_text` was refactored onto as well — deliberately, so "these two paths
+> must not disagree about what counts as a droppable hint" is structural
+> rather than duplicated. **The two shapes still differ**; only the reading of
+> them was equalised.
+>
+> **One leg deliberately NOT ported**, and it makes the fix read as incomplete
+> against the ticket's ACs when it is not: `_resolve_hint_match`'s minted shell
+> JobPost (`source='referrer_stub'`, surfaced as `meta.referrer_match`).
+> Verified here rather than taken on report — `referrer_match`, `apply_match`
+> and `canonical_redirect` have **zero readers** in `extension/src`. The
+> referrer pairing itself ships in full through the persisted
+> `Scrape.referrer_url` column, which `compute_duplicate_candidates` joins at
+> `serializers.py:919-924`. Since CC-176 routes essentially all extension
+> traffic here, porting the stub would mint one unconsumed shell per Send from
+> an allowlisted referrer — the write-amplification form of CC-122.
 >
 > **Verdict: API GAP.** Two shapes is survivable and worth a comment; two
 > shapes where one silently drops two of three fields is a bug.
@@ -475,10 +507,12 @@ PR.** Two owners is the bug.
 4. **What is the "Phase B consume" path?** `_consume_extension_direct_payload`
    (`scrapes.py:712`), synchronous and in-request. It creates the JobPost with
    no LLM whenever `structured_prefill` yields a title and a company.
-5. **Why do only 3 of 100 posts have an `apply_url`?** Five writers exist and
-   the fast path is none of them. The one route that honours `apply_url` is
-   `from-text`, which CC-176 made unreachable. The surviving few are the
-   user-driven link picker.
+5. **Why do only 3 of 100 posts have an `apply_url`?** *(Answered, then fixed
+   — 2026-08-23.)* Five writers existed and the fast path was none of them. The
+   one route that honoured `apply_url` was `from-text`, which CC-176 made
+   unreachable; the surviving few were the user-driven link picker. Closed by
+   api `16dc923` plus two new extension-side writers. **Re-measure before
+   citing the 3-of-100 figure again.**
 
 ---
 
@@ -491,22 +525,36 @@ list.
 |---|---|---|---|
 | **0** | `POST /scrapes/` is staff-only; the gate fires before `source_mode` is known | **OPEN — product decision** | api (+ client message either way) |
 | **0b** | `create()` is not atomic; the row is briefly claimable at `'hold'` | **API GAP** | api |
-| **H** | Tier-0 drops `apply_url`, never writes `job_content`, skips CompletenessReviewer, persists no `html` | **API GAP** | api |
-| **1** | `canonical_link_hint` + `referrer_url` dropped on the fast path | **API GAP** | api |
+| **H** | Tier-0 drops `apply_url`, never writes `job_content`, skips CompletenessReviewer, persists no `html` | **PARTLY FIXED** — `apply_url` honoured (api `16dc923`). `job_content` is api #252, still open. CompletenessReviewer + `html` untouched. | api |
+| **1** | `canonical_link_hint` + `referrer_url` dropped on the fast path | ✅ **FIXED** — api `16dc923` (#253) | merged |
 | **2** | `auto_score` absent from `POST /scrapes/` | **API GAP, worked around** | decide owner first |
-| **3** | closed evidence detected, never sent, and undetectable server-side on this path | **API GAP** | api (persist `job_content`) |
+| **3** | closed evidence detected, never sent, and undetectable server-side on this path | **API GAP** — depends on `job_content`, i.e. on api #252 | api |
 | **7** | client waits for `'no_match'`, a status the api never emits | **CLIENT WRONG** | extension |
-| **6** | client reads `is_known_good`/`readiness`; prod serves top-level | **API GAP, half-built, UNCOMMITTED** | api — **do this first** |
+| **6** | client reads `is_known_good`/`readiness`; prod serves top-level | ✅ **FIXED** — api `b2d931d` (#251); client reads the attributes location with a `=== true` fail-safe | merged |
 | **4** | `filter[query]` does not search `apply_url` | **correct as designed** | — |
 | **5** | two body shapes on `POST /job-applications/` | **UNDOCUMENTED** | comments |
 | — | `filter[link]` bypasses per-user visibility | **UNDOCUMENTED** | comment |
 | — | worker terminal set has two dead entries | **harmless** | — |
 
-**Sequence.** #6 first — it is already written, backwards-compatible, and
-sitting uncommitted in the `api/` working tree; leaving it there blocks
-everything else. Then the headline cluster (H, 1, 3) as one api change, since
-persisting `job_content` and reading the hints are the same edit. #7 is
-client-only and can go any time. #0 waits on a decision.
+**Sequence — updated 2026-08-23, after three of these landed.**
+
+Done: **#6** (api `b2d931d` / #251), **#1** and the `apply_url` half of **#H**
+(api `16dc923` / #253). The plan had #H and #1 as one api change because
+persisting `job_content` and reading the hints looked like the same edit; they
+split in practice, and the hints half shipped first.
+
+Remaining, in order:
+
+1. **#H's `job_content` half + #3** — still one change, and still blocked on the
+   same question: api **#252** is red because requiring a description on Tier 0
+   is a *contract change*, not a bug fix. Two existing tests deliberately assert
+   the opposite, and the fix costs an LLM parse per LinkedIn send. **Doug's
+   call.** Closed-posting detection (#3) cannot work until `job_content` is
+   persisted, so it waits on that decision rather than on any code.
+2. **#7** — client-only, can go any time.
+3. **#2** (`auto_score`) — needs an owner decided first; there is a documented
+   double-scoring hazard.
+4. **#0** — product decision, unchanged.
 
 **Every api change extends the contract tests named at the top of this file, in
 the same PR.** That is what stops this document from rotting into fiction.
