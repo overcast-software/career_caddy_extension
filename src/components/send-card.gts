@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { request, FRONTEND_ORIGIN } from '../lib/api.ts';
@@ -37,6 +38,24 @@ export default class SendCard extends Component {
    * the captured text, mirroring the scrape graph's own closed_evidence rule.
    */
   @tracked closedEvidence: string | null = null;
+
+  /**
+   * Everything above except `autoScore` describes ONE page, and the panel
+   * outlives pages. Without this guard the Fluidstack posting's "no longer
+   * accepting applications", its "sent 10,059 characters", and its
+   * "open it in Career Caddy" link all followed the user to jobright.ai and
+   * described a page they had never sent.
+   *
+   * A ticket rather than a flag, because a send in flight when the tab moves
+   * must not write its result into the new page either — the response arrives
+   * long after the navigation and has no idea it is stale.
+   */
+  private ticket = 0;
+
+  constructor(owner: Owner, args: object) {
+    super(owner, args);
+    page.onChange(() => this.resetForNewPage());
+  }
 
   get page(): typeof page {
     return page;
@@ -160,7 +179,20 @@ export default class SendCard extends Component {
     };
   }
 
+  /** Page-scoped state only. `autoScore` is a preference and survives. */
+  private resetForNewPage(): void {
+    this.ticket++;
+    this.status = '';
+    this.kind = 'idle';
+    this.scrapeId = null;
+    this.closedEvidence = null;
+  }
+
   private async doSend(): Promise<void> {
+    const mine = ++this.ticket;
+    /** True once the tab has moved on; every write below checks it. */
+    const stale = (): boolean => mine !== this.ticket;
+
     if (!session.apiKey) {
       this.kind = 'error';
       this.status = 'Connect to Career Caddy first.';
@@ -172,17 +204,20 @@ export default class SendCard extends Component {
     this.status = 'Reading the page…';
 
     const payload = await page.capture();
+    if (stale()) return;
     if (!payload) {
       // THREE different causes, three different fixes. Collapsing them into
       // one message is how someone ends up debugging cross-origin iframes
       // when the actual answer is a permission they never granted.
       await access.refresh();
+      if (stale()) return;
       if (access.needsGrant) {
         this.kind = 'error';
         this.status = `Enable Career Caddy on ${access.host} first — the button is just above.`;
         return;
       }
       const blocked = await page.countBlockedFrames();
+      if (stale()) return;
       this.kind = 'error';
       this.status = blocked
         ? `Could not read this tab. ${blocked} embedded frame(s) are cross-origin, so the posting may live somewhere the extension cannot reach.`
@@ -205,6 +240,7 @@ export default class SendCard extends Component {
     const chars = payload.text.trim().length;
     if (chars < MIN_USEFUL_CHARS) {
       const blocked = await page.countBlockedFrames();
+      if (stale()) return;
       this.kind = 'error';
       this.status =
         `Only ${chars} characters readable here` +
@@ -225,6 +261,7 @@ export default class SendCard extends Component {
     // server does not have to re-derive what the page already stated. Their
     // ABSENCE never changes the path — see the CC-176 note above.
     const hints = await this.collectHints(payload.url);
+    if (stale()) return;
     const decision = planSend(payload, hints, { autoScore: this.autoScore });
     console.debug('[cc] send gate', decision);
 
@@ -237,6 +274,12 @@ export default class SendCard extends Component {
         body: decision.plan.body,
       },
     );
+
+    // The send completed, but for WHICH page? If the tab moved while this was
+    // in flight, the result belongs to a page the panel is no longer showing.
+    // The scrape is still real and still processing server-side — it just
+    // must not be narrated here, under a different posting's heading.
+    if (stale()) return;
 
     if (!resp.ok) {
       this.kind = 'error';
