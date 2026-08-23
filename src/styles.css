@@ -1025,6 +1025,14 @@ h1 {
   cursor: pointer;
 }
 .ad__scan:hover { border-color: var(--accent-500); }
+.ad__scan:disabled { opacity: 0.6; cursor: default; }
+/* The desk's own status line — a stale golfer click, not a draft's note. */
+.ad__note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
 
 /* --- the question picker: two views of one list --------------------------- */
 .qp { margin-bottom: 10px; }

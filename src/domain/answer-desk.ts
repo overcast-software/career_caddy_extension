@@ -204,6 +204,38 @@ export function buildEntries(
   });
 }
 
+/**
+ * Which questions get an in-page golfer mark.
+ *
+ * PROSE ONLY (CCEXT-54). `kind: 'text'` is not "prose" — `fieldKind()` ends
+ * `if (tag === 'INPUT' || tag === 'TEXTAREA') return 'text'`, so it covers
+ * First name, Email, Phone, LinkedIn and Website too. On a stock Greenhouse
+ * form that would be about six wrong marks for every right one. `control`
+ * already draws the line and its own comment says so.
+ *
+ * `anchored` IS DELIBERATELY NOT CONSULTED, and that changed with the move to
+ * a field anchor. It reported whether the scanner managed to stamp a LABEL,
+ * and so it refused anchorless rungs (`aria-label`, placeholder, field name),
+ * anchors inside a `<label>`, and anchors shared by two fields. None of those
+ * are properties of a field: the field is exact, always present, never shared
+ * and never a guess, because it already carries `data-cc-field` in order to be
+ * written into.
+ *
+ * Leaving the clause in would have been the quiet failure — everything still
+ * builds, the marks just never appear on weak-labelled questions, which is the
+ * extra coverage the redirect was supposed to BUY. The panel still flags those
+ * rows as having a guessed label; that is a display concern, not a paint one.
+ *
+ * Pure, so the rule is testable without a page.
+ */
+export function decorationItems(entries: DeskEntry[]): DeskEntry[] {
+  return entries.filter(
+    (e) =>
+      e.field.kind === 'text' &&
+      (e.field.control === 'textarea' || e.field.control === 'contenteditable'),
+  );
+}
+
 /** A blank draft for a question that has not been asked yet. */
 export function newDraft(field: PageQuestion, now: number): AnswerDraft {
   return {

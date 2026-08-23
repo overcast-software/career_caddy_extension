@@ -6,6 +6,7 @@ import {
   addInstruction,
   buildEntries,
   composeInjectedPrompt,
+  decorationItems,
   draftScopeFor,
   extractAnswerRefs,
   isResumable,
@@ -33,6 +34,7 @@ function textField(over: Partial<PageQuestion> = {}): PageQuestion {
     label: 'Why do you want to work here?',
     occurrence: 0,
     frameId: 0,
+    anchored: true,
     ...over,
   } as PageQuestion;
 }
@@ -48,6 +50,7 @@ function choiceField(over: Partial<PageQuestion> = {}): PageQuestion {
     label: 'Are you authorized to work in the US?',
     occurrence: 0,
     frameId: 0,
+    anchored: false,
     ...over,
   } as PageQuestion;
 }
@@ -388,5 +391,69 @@ describe('isResumable', () => {
       at: NOW,
     });
     expect(isResumable(chatty, NOW)).toBe(false);
+  });
+});
+
+describe('decorationItems', () => {
+  it('marks a textarea', () => {
+    const entries = buildEntries([textField({ control: 'textarea' })], {});
+    expect(decorationItems(entries)).toHaveLength(1);
+  });
+
+  it('marks a contenteditable', () => {
+    const entries = buildEntries([textField({ control: 'contenteditable' })], {});
+    expect(decorationItems(entries)).toHaveLength(1);
+  });
+
+  it('NEVER marks a single-line input — CCEXT-54, the whole point', () => {
+    // `kind: 'text'` is not "prose". fieldKind() ends
+    // `if (tag === 'INPUT' || tag === 'TEXTAREA') return 'text'`, so it covers
+    // First name, Email, Phone, LinkedIn. Marking on `kind` would put roughly
+    // six wrong golfers on a stock Greenhouse form for every right one.
+    const entries = buildEntries([textField({ control: 'input' })], {});
+    expect(decorationItems(entries)).toEqual([]);
+  });
+
+  it('never marks a choice control', () => {
+    const entries = buildEntries([choiceField()], {});
+    expect(decorationItems(entries)).toEqual([]);
+  });
+
+  it('marks a prose field the scanner could not anchor — the anchor moved to the FIELD', () => {
+    // THIS TEST WAS INVERTED DELIBERATELY. It used to assert the opposite, and
+    // it was right to, because the mark was a `::after` on the LABEL: an
+    // anchorless rung (aria-label / placeholder / name), an anchor inside a
+    // `<label>`, or an anchor shared with another field (CCEXT-57) meant there
+    // was no node to paint on, so `anchored: false` had to mean no mark.
+    //
+    // The mark is now a real element anchored to the FIELD, which is exact,
+    // always present, never shared and never a guess — it already carries
+    // `data-cc-field` so the answer can be written into it. Every reason
+    // `anchored` existed is a property of labels, so consulting it here would
+    // now silently drop marks on exactly the weak-labelled questions the
+    // redirect was meant to GAIN. That failure would not have shown up in a
+    // build or a type error, only as marks quietly not appearing.
+    //
+    // `anchored` still means something to the PANEL, which flags those rows as
+    // having a guessed label. It just no longer decides what gets painted.
+    const entries = buildEntries([textField({ control: 'textarea', anchored: false })], {});
+    expect(decorationItems(entries)).toHaveLength(1);
+  });
+
+  it('picks the prose ones out of a mixed form', () => {
+    const entries = buildEntries(
+      [
+        textField({ label: 'First name', control: 'input' }),
+        textField({ label: 'Why here?', control: 'textarea' }),
+        choiceField(),
+        textField({ label: 'Phone', control: 'input' }),
+        textField({ label: 'Proud of?', control: 'textarea' }),
+      ],
+      {},
+    );
+    expect(decorationItems(entries).map((e) => e.field.label)).toEqual([
+      'Why here?',
+      'Proud of?',
+    ]);
   });
 });

@@ -39,6 +39,20 @@
  */
 export const CC_FIELD_ATTR = 'data-cc-field';
 
+/**
+ * The attribute a golfer mark is stamped on, carrying the field's token.
+ *
+ * AN ATTRIBUTE, NOT A NODE. The mark itself is a CSS `::after` on this
+ * selector, injected with `chrome.scripting.insertCSS`, so the extension adds
+ * ZERO elements to the employer's form: nothing to reflow, nothing for React
+ * to reconcile away, and no `web_accessible_resources`. Stamping an attribute
+ * is a technique this scanner already uses for `CC_FIELD_ATTR`.
+ *
+ * A second attribute, `${CC_GOLF_ATTR}-wide`, marks anchors whose text stops
+ * well short of their box — see `textFallsShortOfBox`.
+ */
+export const CC_GOLF_ATTR = 'data-cc-golf';
+
 /** What a writable control turned out to be. Shown, so "input" warns you. */
 export type TextControl = 'input' | 'textarea' | 'contenteditable';
 
@@ -106,7 +120,20 @@ export type TextField = Extract<ResolvedField, { kind: 'text' }>;
  * collapsing into one entry. They are two questions; a form that asks the
  * same thing twice wants two answers.
  */
-export type ScannedField = ResolvedField & { label: string; occurrence: number };
+export type ScannedField = ResolvedField & {
+  label: string;
+  occurrence: number;
+  /**
+   * A golfer mark was stamped on this question's label.
+   *
+   * False for choice controls, for single-line inputs (CCEXT-54 — prose only),
+   * for anchorless rungs (`aria-label`, placeholder, field name), for anchors
+   * inside a `<label>`, and for anchors shared with another field (CCEXT-57).
+   * The panel uses it to say which questions have an in-page accelerator and
+   * which are list-only.
+   */
+  anchored: boolean;
+};
 
 /** The scanned arm the write path accepts. */
 export type ScannedTextField = Extract<ScannedField, { kind: 'text' }>;
@@ -149,6 +176,7 @@ type FieldEl = HTMLElement & {
 export function ccResolveFieldInPage(
   attr: string,
   mode: 'scan' | 'selection',
+  golfAttr: string,
 ): ScanResult | SelectionResult {
   const scanning = mode === 'scan';
 
@@ -335,6 +363,33 @@ export function ccResolveFieldInPage(
     clearStamps(): void {
       const stale = document.querySelectorAll('[' + attr + ']');
       for (let i = 0; i < stale.length; i++) stale[i]!.removeAttribute(attr);
+      // The marks go too. A rescan re-derives every anchor, so leaving the old
+      // ones would paint golfers for questions that no longer exist and whose
+      // tokens now resolve to nothing.
+      const marked = document.querySelectorAll('[' + golfAttr + ']');
+      for (let i = 0; i < marked.length; i++) {
+        marked[i]!.removeAttribute(golfAttr);
+        marked[i]!.removeAttribute(golfAttr + '-wide');
+      }
+    },
+
+    /**
+     * Does this element's text stop well short of its own right edge?
+     *
+     * A Range over the contents measures where the TEXT actually ends, which
+     * is the only thing that matters for placing a mark beside it. A block
+     * label's box runs the full row; an inline one hugs its text.
+     */
+    textFallsShortOfBox(node: Element): boolean {
+      try {
+        const box = node.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const text = range.getBoundingClientRect();
+        return box.right - text.right > 24;
+      } catch {
+        return false;
+      }
     },
 
     textControlOf(field: FieldEl): TextControl {
@@ -351,7 +406,7 @@ export function ccResolveFieldInPage(
       el: FieldEl,
       startAt: Element | null,
       strip: string[],
-    ): { label: string; how: string; weak: boolean } | null {
+    ): { label: string; how: string; weak: boolean; node: Element | null } | null {
       // 1. label[for="X"] — the explicit, unambiguous case.
       if (el.id) {
         let lab: Element | null = null;
@@ -361,41 +416,49 @@ export function ccResolveFieldInPage(
           lab = null;
         }
         const t = h.textOf(lab);
-        if (t) return { label: t, how: 'its label', weak: false };
+        if (t) return { label: t, how: 'its label', weak: false, node: lab };
       }
 
       // 2. A wrapping <label>.
       const wrap = el.closest('label');
       if (wrap) {
         const t = h.textMinus(wrap, [h.textOf(el)].concat(strip));
-        if (t) return { label: t, how: 'the wrapping label', weak: false };
+        if (t) return { label: t, how: 'the wrapping label', weak: false, node: wrap };
       }
 
       // 3. aria-labelledby, forwards this time — the field names its own label.
       const ids = el.getAttribute('aria-labelledby') || '';
       if (ids) {
         const parts: string[] = [];
+        let first: Element | null = null;
         const list = ids.split(/\s+/);
         for (let i = 0; i < list.length; i++) {
-          const t = h.textOf(document.getElementById(list[i] || ''));
-          if (t) parts.push(t);
+          const target = document.getElementById(list[i] || '');
+          const t = h.textOf(target);
+          if (t) {
+            parts.push(t);
+            if (!first) first = target;
+          }
         }
         if (parts.length) {
-          return { label: parts.join(' '), how: 'aria-labelledby', weak: false };
+          // `first` and not the joined set: an anchor must be ONE node.
+          return { label: parts.join(' '), how: 'aria-labelledby', weak: false, node: first };
         }
       }
 
       // 4. aria-label.
       const aria = h.tidy(el.getAttribute('aria-label'));
-      if (aria) return { label: aria, how: 'aria-label', weak: false };
+      // An attribute of the field itself — there is no label element to mark.
+      if (aria) return { label: aria, how: 'aria-label', weak: false, node: null };
 
       // 5. A <fieldset>'s <legend>. This is how a well-built radio group states
       //    its question, so it has to beat the ancestor walk below — which would
       //    otherwise return the nearest option text.
       const fs = el.closest('fieldset');
       if (fs) {
-        const t = h.textOf(fs.querySelector('legend'));
-        if (t) return { label: t, how: 'the fieldset legend', weak: false };
+        const legend = fs.querySelector('legend');
+        const t = h.textOf(legend);
+        if (t) return { label: t, how: 'the fieldset legend', weak: false, node: legend };
       }
 
       // 6. Walk up. CAPPED at 6, the same cap and the same reason as the forward
@@ -408,16 +471,16 @@ export function ccResolveFieldInPage(
       for (let i = 0; n && i < 6; i++, n = n.parentElement) {
         const t = h.textMinus(n, [h.textOf(el)].concat(strip));
         if (t && t.length > 300) break;
-        if (t) return { label: t, how: 'the surrounding block', weak: false };
+        if (t) return { label: t, how: 'the surrounding block', weak: false, node: n };
       }
 
       // 7. Last resort, and flagged as such. A placeholder is a hint and a name
       //    is a developer's identifier; neither is a question the user asked to
       //    have answered, so the UI says we guessed.
       const ph = h.tidy(el.getAttribute('placeholder'));
-      if (ph) return { label: ph, how: 'its placeholder', weak: true };
+      if (ph) return { label: ph, how: 'its placeholder', weak: true, node: null };
       const nm = h.tidy(el.getAttribute('name'));
-      if (nm) return { label: nm, how: 'its field name', weak: true };
+      if (nm) return { label: nm, how: 'its field name', weak: true, node: null };
       return null;
     },
 
@@ -446,6 +509,8 @@ export function ccResolveFieldInPage(
     h.clearStamps();
 
     const out: ScannedField[] = [];
+    /** Candidate marks, resolved during the walk and stamped after the cap. */
+    const anchors: { node: Element; token: string }[] = [];
     const seenGroups: Record<string, boolean> = {};
     const counts: Record<string, number> = {};
     const all = document.querySelectorAll(FIELDS);
@@ -496,24 +561,102 @@ export function ccResolveFieldInPage(
           weak: lab.weak,
           label: lab.label,
           occurrence,
+          anchored: false,
         });
       } else {
+        const token = h.stamp(el);
+        const control = h.textControlOf(el);
         out.push({
           kind: 'text',
-          token: h.stamp(el),
-          control: h.textControlOf(el),
+          token,
+          control,
           existing: h.readExisting(el),
           how: lab.how,
           weak: lab.weak,
           label: lab.label,
           occurrence,
+          anchored: false,
         });
+
+        // CCEXT-54: PROSE ONLY. `kind: 'text'` is every non-skipped input —
+        // First name, Email, Phone, LinkedIn — because fieldKind() ends
+        // `if (tag === 'INPUT' || tag === 'TEXTAREA') return 'text'`. On a
+        // stock Greenhouse form that would be roughly six wrong marks for
+        // every right one. `control` already carries the distinction the
+        // marking rule needs, and single-line inputs stay fully usable from
+        // the panel list.
+        //
+        // `node.closest('label') !== null` is refused as an anchor: a mark
+        // inside a <label> activates the label's control on click, which in a
+        // radio group SELECTS AN OPTION. Rung 3 (aria-labelledby) commonly
+        // resolves to a span inside the label, which is exactly the case that
+        // rule exists for.
+        if (
+          (control === 'textarea' || control === 'contenteditable') &&
+          lab.node &&
+          !lab.node.closest('label')
+        ) {
+          anchors.push({ node: lab.node, token });
+        }
       }
     }
 
     const CAP = 40;
     const dropped = out.length > CAP ? out.length - CAP : 0;
-    return { fields: dropped ? out.slice(0, CAP) : out, dropped };
+    const kept = dropped ? out.slice(0, CAP) : out;
+
+    // CCEXT-57: ONE MARK PER ANCHOR, OR NO MARK AT ALL.
+    //
+    // Several fields routinely resolve to the same node — a shared <legend>,
+    // or one rung-6 block ancestor containing a whole form section. Two marks
+    // on one node stack at identical coordinates with only the last clickable,
+    // so the user clicks a golfer and gets someone else's question. An
+    // ambiguous mark breaks the entire contract, and the panel list carries
+    // those questions completely, so the honest move is to paint NEITHER.
+    const keptTokens: Record<string, boolean> = {};
+    for (let i = 0; i < kept.length; i++) {
+      const token = kept[i]!.token;
+      if (token) keptTokens[token] = true;
+    }
+    const claims: { node: Element; token: string }[] = [];
+    for (let i = 0; i < anchors.length; i++) {
+      const claim = anchors[i]!;
+      if (keptTokens[claim.token]) claims.push(claim);
+    }
+
+    const anchoredTokens: Record<string, boolean> = {};
+    for (let i = 0; i < claims.length; i++) {
+      const claim = claims[i]!;
+      let unique = true;
+      for (let j = 0; j < claims.length; j++) {
+        if (j !== i && claims[j]!.node === claim.node) {
+          unique = false;
+          break;
+        }
+      }
+      if (!unique) continue;
+      claim.node.setAttribute(golfAttr, claim.token);
+      // MEASURED, not guessed. On a live Greenhouse application form every
+      // label is `display: block` and its box runs the full row, so the text
+      // ends 283-430px short of the box's right edge — and `left: 100%` would
+      // put the mark that far from the question it belongs to, at the row's
+      // edge or past it. On an inline label the same rule lands perfectly.
+      // So the mark is placed INSIDE a wide box and just AFTER a tight one,
+      // and which of those applies is measured here rather than assumed from
+      // `display`, because the thing that matters is where the text actually
+      // ends.
+      if (h.textFallsShortOfBox(claim.node)) {
+        claim.node.setAttribute(golfAttr + '-wide', '');
+      }
+      anchoredTokens[claim.token] = true;
+    }
+
+    for (let i = 0; i < kept.length; i++) {
+      const field = kept[i]!;
+      if (field.token && anchoredTokens[field.token]) field.anchored = true;
+    }
+
+    return { fields: kept, dropped };
   }
 
   // --- selection mode: unchanged from CCEXT-26 M1 --------------------------

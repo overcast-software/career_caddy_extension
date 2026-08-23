@@ -10,6 +10,7 @@ import {
   addInstruction,
   buildEntries,
   composeInjectedPrompt,
+  decorationItems,
   draftScopeFor,
   extractAnswerRefs,
   isResumable,
@@ -26,6 +27,7 @@ import type {
   PageQuestion,
 } from '../domain/answer-desk.ts';
 import { autoInsertDecision } from '../domain/answer-reuse.ts';
+import { parseGolfMessage } from '../domain/messages.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
 import { application } from './application.ts';
 import { errorLog } from './errors.ts';
@@ -104,8 +106,20 @@ class AnswerDesk {
    * abandoning both at the page you were halfway through.
    */
   private scope = '';
+  /**
+   * The last thing worth telling the user about the DESK as a whole, as
+   * opposed to about one question's draft.
+   *
+   * Exists for one case in particular: a golfer click that resolves to
+   * nothing. See `onGolfMessage`.
+   */
+  @tracked deskNote = '';
+
   /** Tokens already auto-delivered, so one field is never written twice. */
   private delivered = new Map<string, string>();
+  /** The live port to the page's marks, and the tab it belongs to. */
+  private golfPort: chrome.runtime.Port | null = null;
+  private golfTabId: number | undefined;
   private persistTimer: ReturnType<typeof setTimeout> | undefined;
   private loaded = false;
 
@@ -139,6 +153,12 @@ class AnswerDesk {
     // cross-contamination the nesting exists to prevent.
     await this.flushPersist();
 
+    // Marks live exactly as long as the panel is pointed at their page. A tab
+    // switch is the case that bites: `fields` is cleared here and no rescan
+    // happens, so without this the old tab keeps N golfers whose tokens now
+    // resolve to nothing.
+    this.disconnectGolf();
+
     const url = page.url;
     const scope = draftScopeFor(url);
 
@@ -150,6 +170,7 @@ class AnswerDesk {
     this.selectedKey = null;
     this.scanState = 'idle';
     this.scanNote = '';
+    this.deskNote = '';
     this.delivered.clear();
 
     const drafts = await this.readPage(scope);
@@ -165,9 +186,21 @@ class AnswerDesk {
 
   /** Find the questions. The one deliberate page read this surface makes. */
   async scan(): Promise<void> {
+    // Two presses currently start two passes, and the second one's
+    // `clearStamps()` runs while the first is still stamping. Guard here
+    // rather than only disabling the button, so a stray programmatic call
+    // cannot do it either.
+    if (this.scanState === 'scanning') return;
+
     const startedUrl = page.url;
     this.scanState = 'scanning';
     this.scanNote = '';
+    this.deskNote = '';
+
+    // Drop the previous marks BEFORE re-scanning. The scan's own
+    // `clearStamps()` strips the attributes, but the page-side listener and
+    // the port belong to the previous pass and would otherwise leak.
+    this.disconnectGolf();
 
     const fields = await page.scanQuestions();
     if (startedUrl !== page.url) return; // superseded by a navigation
@@ -200,6 +233,109 @@ class AnswerDesk {
       const firstWritable = fields.find((f) => f.kind === 'text');
       this.selectedKey = keyOf(firstWritable ?? fields[0]!);
     }
+
+    await this.decorate(startedUrl);
+  }
+
+  /**
+   * Paint the marks and hold the port open.
+   *
+   * Failure is silent by design: no host permission, a restricted page, a tab
+   * that navigated mid-scan. The marks are an ACCELERATOR and the panel list
+   * is the complete path to every question, so a page where painting cannot
+   * work is degraded, not broken — and saying so would be noise on the many
+   * pages where it simply does not apply.
+   */
+  private async decorate(startedUrl: string): Promise<void> {
+    const tabId = page.tabId;
+    // The panel is the authority on which questions exist and which are prose,
+    // so it hands the painter a finished token list rather than letting the
+    // page classify anything a second time (CCEXT-30, CCEXT-59). `entries` is
+    // already the merged, occurrence-corrected view across frames.
+    const tokens = decorationItems(this.entries)
+      .map((e) => e.field.token)
+      .filter((t): t is string => typeof t === 'string');
+    const port = await page.decorateQuestions(tokens);
+    if (!port) return;
+
+    // The scan is async; if the page moved under us, drop the port we just
+    // opened rather than leaving marks on a page nobody is looking at.
+    if (startedUrl !== page.url) {
+      try {
+        port.disconnect();
+      } catch {
+        /* already gone */
+      }
+      return;
+    }
+
+    this.golfPort = port;
+    this.golfTabId = tabId;
+    port.onMessage.addListener((raw) => this.onGolfMessage(raw, tabId));
+    // Chrome drops the port when the tab navigates or the frame goes away.
+    // Nothing to clean up panel-side beyond forgetting it — the page's own
+    // onDisconnect strips the attributes.
+    port.onDisconnect.addListener(() => {
+      if (this.golfPort === port) {
+        this.golfPort = null;
+        this.golfTabId = undefined;
+      }
+    });
+  }
+
+  /**
+   * A golfer was clicked.
+   *
+   * CCEXT-59: the message carries the field's TOKEN, not `{label, occurrence}`.
+   * Occurrence is counted per-frame by the scanner and re-derived across frames
+   * by the panel, so a label key sent from a subframe would name a different
+   * question; a token is the identity of one exact element and sidesteps that
+   * entirely.
+   *
+   * The tab check is CCEXT-55 translated to a panel-initiated port. There is no
+   * `port.sender` to authenticate here — the panel dialled a tab it chose — but
+   * a port opened on a PREVIOUS tab can still deliver late, and selecting into
+   * the tab you are now looking at would be exactly the cross-page leak the
+   * whole scoping design exists to prevent.
+   */
+  private onGolfMessage(raw: unknown, tabId: number | undefined): void {
+    if (tabId === undefined || tabId !== page.tabId) return;
+
+    const msg = parseGolfMessage(raw);
+    if (!msg) return;
+
+    const entry = this.entries.find((e) => e.field.token === msg.token);
+    if (!entry) {
+      // A STALE CLICK MUST SPEAK. Silence here is safe and unusable: the mark
+      // is still on the page, the user pressed it, and nothing happened. This
+      // is the only moment they can learn both that the form moved and what to
+      // press about it.
+      this.deskNote = 'That question is no longer on the page — re-caddy the form.';
+      return;
+    }
+
+    this.deskNote = '';
+    this.selectedKey = entry.key;
+  }
+
+  /** Drop the port, which is what tells the page to strip its marks. */
+  private disconnectGolf(): void {
+    const port = this.golfPort;
+    const tabId = this.golfTabId;
+    this.golfPort = null;
+    this.golfTabId = undefined;
+    if (port) {
+      try {
+        port.disconnect();
+      } catch {
+        /* already gone */
+      }
+    }
+    // Take the CSS back off the tab the marks were painted on — NOT the
+    // current one. By the time a navigation or tab switch calls this,
+    // `page.tabId` is already the new tab, and cleaning that one is how the
+    // old tab keeps its orphaned marks (CCEXT-56).
+    if (tabId !== undefined) void page.undecorateQuestions(tabId);
   }
 
   select = (key: string): void => {

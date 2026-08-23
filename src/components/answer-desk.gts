@@ -36,9 +36,24 @@ export default class AnswerDeskCard extends Component {
     return this.entries.length > 0;
   }
 
+  /**
+   * One control, three labels — Doug's "re-caddy the form" button.
+   *
+   * NOT a second button. This is the same `.ad__scan` that has always driven
+   * the scan; phase C only gave it a second job (repainting the marks), and a
+   * separate control for that would have made "the list is stale" and "the
+   * marks are stale" look like different problems when they are one.
+   */
   get scanLabel(): string {
-    if (answerDesk.scanState === 'scanning') return 'Scanning…';
-    return this.hasQuestions ? 'Rescan' : 'Find questions';
+    if (answerDesk.scanState === 'scanning') return 'Caddying…';
+    return this.hasQuestions ? 'Re-caddy' : 'Caddy the form';
+  }
+
+  /** Same sentence in all three states — the button's job never changes. */
+  scanTitle = 'Re-read this form and re-place the markers';
+
+  get isScanning(): boolean {
+    return answerDesk.scanState === 'scanning';
   }
 
   /**
@@ -103,11 +118,25 @@ export default class AnswerDeskCard extends Component {
         Questions on this page
         <span class="ad__head-actions">
           {{#if this.busyLabel}}<span class="ad__busy">{{this.busyLabel}}</span>{{/if}}
-          <button type="button" class="ad__scan" {{on "click" this.rescan}}>
+          <button
+            type="button"
+            class="ad__scan"
+            title={{this.scanTitle}}
+            disabled={{this.isScanning}}
+            {{on "click" this.rescan}}
+          >
             {{this.scanLabel}}
           </button>
         </span>
       </p>
+
+      {{#if this.desk.deskNote}}
+        {{! A golfer click that resolved to nothing. The silent no-op was the
+            "safe" reading and it is unusable: the mark is still on the page,
+            the user pressed it, nothing happened. This line is the only place
+            they can learn the form moved and what to press about it. }}
+        <p class="ad__note">{{this.desk.deskNote}}</p>
+      {{/if}}
 
       <QuestionPicker
         @entries={{this.entries}}

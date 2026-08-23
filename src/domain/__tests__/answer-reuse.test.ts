@@ -16,6 +16,7 @@ function textField(over: Partial<PageQuestion> = {}): PageQuestion {
     label: 'Why here?',
     occurrence: 0,
     frameId: 0,
+    anchored: true,
     ...over,
   } as PageQuestion;
 }
@@ -31,6 +32,7 @@ function choiceField(): PageQuestion {
     label: 'Authorized to work?',
     occurrence: 0,
     frameId: 0,
+    anchored: false,
   } as PageQuestion;
 }
 
