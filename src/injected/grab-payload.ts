@@ -12,10 +12,20 @@
  *   2. NO imports. Type-only imports are fine; they are erased.
  *   3. Only JSON crosses back. A DOM node cannot, which is why the field
  *      resolver stamps an attribute and the writer re-finds it by that stamp.
+ *   4. NO NESTED NAMED FUNCTIONS. This one is a build-layer trap and it is not
+ *      obvious: `esbuild: { keepNames: true }` in vite.config.mjs rewrites
+ *      every named function — declaration, named expression, AND arrow
+ *      assigned to a const — into `__name(fn, "original")`. Inside an injected
+ *      function that `__name` helper is a module-scope reference the page does
+ *      not have, so the whole function throws on injection. Measured, not
+ *      assumed: an **object literal of methods** (`const h = { tidy(s) {…} }`)
+ *      is the one form esbuild leaves alone, so shared helpers go there. See
+ *      resolve-field.ts, which is the only injected function big enough to
+ *      need any, and scripts/injected-gate.mjs, which caught this.
  *
- * The legacy extension was structurally immune to (1) because it had no build
- * step. This one is not, which is why the rule is written here rather than
- * assumed.
+ * The legacy extension was structurally immune to (1) and (4) because it had
+ * no build step. This one is not, which is why the rules are written here
+ * rather than assumed.
  */
 
 export interface PagePayload {

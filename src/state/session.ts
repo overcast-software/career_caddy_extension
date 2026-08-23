@@ -27,6 +27,7 @@ export const KEYS = {
   viewedPosts: 'ccViewedPosts',
   appChecks: 'ccAppChecks',
   pendingApplies: 'ccPendingApplies',
+  answerDrafts: 'ccAnswerDrafts',
 } as const;
 
 /**
@@ -53,7 +54,9 @@ export const USER_SCOPED_STORAGE_KEYS: readonly string[] = [
   KEYS.pendingApplies,
   'ccSentPages',
   KEYS.matchApps,
-  'ccAnswerDrafts',
+  // Drafts quote the questions an employer asked and the answers written for
+  // them, so this is at least as sensitive as anything above it.
+  KEYS.answerDrafts,
 ];
 
 export interface Me {

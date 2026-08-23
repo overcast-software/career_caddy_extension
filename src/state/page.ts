@@ -4,8 +4,19 @@ import type { PagePayload } from '../injected/grab-payload.ts';
 import { ccGrabHints } from '../injected/grab-hints.ts';
 import { ccGrabLadderSignals } from '../injected/grab-ladder-signals.ts';
 import { ccGrabExcerpt } from '../injected/grab-excerpt.ts';
+import {
+  CC_FIELD_ATTR,
+  ccResolveFieldInPage,
+  ccWriteFieldInPage,
+} from '../injected/resolve-field.ts';
+import type {
+  ScanResult,
+  SelectionResult,
+  WriteOutcome,
+} from '../injected/resolve-field.ts';
 import type { LadderSignals } from '../injected/grab-ladder-signals.ts';
 import type { HintSelectors, RawHints } from '../injected/grab-hints.ts';
+import type { PageQuestion } from '../domain/answer-desk.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
 
 /** What capture() returns: the merged page plus how it was assembled. */
@@ -244,6 +255,85 @@ class PageState {
       return typeof text === 'string' ? text.slice(0, max) : '';
     } catch {
       return '';
+    }
+  }
+
+  /**
+   * Every labelled form field on the page, in every frame we can reach.
+   *
+   * `allFrames: true` for the same reason capture() needs it: the classic
+   * Greenhouse setup is an ATS form embedded in company.com/careers, and
+   * reading only the top frame finds no questions at all on exactly the pages
+   * this feature exists for. Cross-origin frames stay invisible — that is a
+   * permission boundary, and countBlockedFrames() is how the panel says so
+   * instead of letting it read as "this form has no questions".
+   *
+   * `frameId` rides along because the WRITE has to go back into the same frame
+   * the field came from.
+   *
+   * OCCURRENCE IS RECOUNTED HERE, ACROSS FRAMES. The injected scanner counts
+   * within its own frame, so two frames each holding a "Why?" box would both
+   * report occurrence 0 and collide on one draft key. Frames are merged in
+   * frameId order (0 is always the top frame) and the count re-derived over the
+   * merged list, so the key is unique across the whole page.
+   */
+  async scanQuestions(): Promise<PageQuestion[]> {
+    if (this.tabId === undefined) return [];
+    // The resolver serves both ladders, so its declared return type is the
+    // union of both. `executeScript` cannot know which mode we asked for — it
+    // just hands back whatever the function returned — so this is the one
+    // place the two shapes are told apart, by a narrow rather than by an `as`
+    // at every read.
+    let results: chrome.scripting.InjectionResult<ScanResult | SelectionResult>[];
+    try {
+      results = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId, allFrames: true },
+        func: ccResolveFieldInPage,
+        // Through `args`, never a closure — see scripts/injected-gate.mjs.
+        args: [CC_FIELD_ATTR, 'scan'],
+      });
+    } catch {
+      return [];
+    }
+
+    const ordered = [...results].sort((a, b) => (a.frameId ?? 0) - (b.frameId ?? 0));
+    const merged: PageQuestion[] = [];
+    const counts = new Map<string, number>();
+    for (const frame of ordered) {
+      const scan = frame.result;
+      if (!scan || !('fields' in scan)) continue;
+      for (const field of scan.fields) {
+        const seen = counts.get(field.label) ?? 0;
+        counts.set(field.label, seen + 1);
+        merged.push({ ...field, occurrence: seen, frameId: frame.frameId ?? 0 });
+      }
+    }
+    return merged;
+  }
+
+  /**
+   * Write into a previously stamped field, in the frame it was stamped in.
+   *
+   * The token is the only handle — it is the sole thing that survives the
+   * round trip out of the page and back. `gone` means the page re-rendered and
+   * dropped the stamp, which must NOT be retried blind: whatever now occupies
+   * that position is not the field the user chose.
+   */
+  async writeField(
+    frameId: number,
+    token: string,
+    value: string,
+  ): Promise<WriteOutcome> {
+    if (this.tabId === undefined) return { ok: false, reason: 'gone' };
+    try {
+      const [hit] = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId, frameIds: [frameId] },
+        func: ccWriteFieldInPage,
+        args: [CC_FIELD_ATTR, token, value],
+      });
+      return hit?.result ?? { ok: false, reason: 'gone' };
+    } catch {
+      return { ok: false, reason: 'gone' };
     }
   }
 

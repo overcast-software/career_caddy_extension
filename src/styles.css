@@ -973,3 +973,129 @@ h1 {
 .dh__grid dt { color: var(--text-muted); }
 /* Wrap, never truncate — a URL's tail is the useful half. */
 .dh__grid dd { margin: 0; overflow-wrap: anywhere; }
+
+/* --- CCEXT-45 answer desk ------------------------------------------------ */
+.ad { margin-bottom: 12px; }
+.ad__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ad__head-actions { display: flex; align-items: center; gap: 8px; }
+.ad__busy { font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--accent-500); }
+.ad__scan {
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.ad__scan:hover { border-color: var(--accent-500); }
+.ad__note { margin: 0 0 8px; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+
+.ad__pick-label,
+.ad__input-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+/* The extension's first <select>. Tokens only, so light/dark x 6 palettes
+   come free — a literal colour here is the one thing that breaks that. */
+.ad__picker {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+.ad__picker:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+
+.ad__q { margin: 10px 0 0; font-size: 12px; font-weight: 600; line-height: 1.4; }
+.ad__how { margin: 2px 0 0; font-size: 10px; font-style: italic; color: var(--text-muted); }
+.ad__choice {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  background: var(--bg-soft);
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+}
+.ad__warn { margin: 6px 0 0; font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+
+.ad__chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
+.ad__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  font-size: 11px;
+  color: var(--accent-700);
+  background: var(--accent-50);
+  border: 1px solid var(--accent-100);
+  border-radius: 999px;
+}
+.ad__chip-text { overflow-wrap: anywhere; }
+.ad__chip-x {
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ad__chip-x:hover { color: var(--error); }
+
+.ad__input {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  resize: vertical;
+}
+.ad__input:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+.ad__input-label { margin-top: 10px; }
+
+.ad__actions { display: flex; gap: 6px; margin-top: 8px; }
+.ad__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ad__btn:hover { border-color: var(--accent-500); }
+.ad__btn:disabled { opacity: 0.6; cursor: default; }
+.ad__btn--go { font-weight: 600; }
+.ad__status { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }

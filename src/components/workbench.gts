@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import DraftBox from './draft-box.gts';
+import AnswerDeskCard from './answer-desk.gts';
 import PermissionProbe from './permission-probe.gts';
 import ErrorLog from './error-log.gts';
 import DevHints from './dev-hints.gts';
@@ -29,6 +29,7 @@ import { linkPicker } from '../state/link-picker.ts';
 import { me } from '../state/me.ts';
 import { ladder } from '../state/ladder.ts';
 import { applyBackfill } from '../state/apply-backfill.ts';
+import { answerDesk } from '../state/answer-desk.ts';
 import { theme } from '../state/theme.ts';
 
 /**
@@ -54,7 +55,6 @@ declare const __BUILD__: string;
 
 export default class Workbench extends Component {
   @tracked uptime = 0;
-  @tracked draft = '';
 
   /**
    * `number | undefined` because the field genuinely has no value until the
@@ -80,6 +80,10 @@ export default class Workbench extends Component {
     void layout.load();
     void session.load();
     void me.load();
+    // The desk registers its OWN page.onChange reset (state/answer-desk.ts).
+    // This only picks up the drafts already on disk, so a panel reload lands
+    // on the answers it was in the middle of.
+    void answerDesk.load();
     page.start();
     // Re-evaluate access on every page change — a grant is per-origin, so
     // switching tabs can move between granted and ungranted sites.
@@ -168,14 +172,26 @@ export default class Workbench extends Component {
         title: 'Applications',
         summary: `${me.items.length} snippets`,
       },
-      { id: 'answers', title: 'Answer desk', summary: `${this.draft.length} chars` },
+      { id: 'answers', title: 'Answer desk', summary: this.answerSummary },
       { id: 'diagnostics', title: 'Diagnostics', summary: `up ${this.uptimeLabel}` },
     ];
   }
 
-  updateDraft = (next: string): void => {
-    this.draft = next;
-  };
+  /**
+   * What a COLLAPSED answer desk still tells you.
+   *
+   * "2 generating" is the line that matters: several questions can be in
+   * flight at once, and a shut section that hid that would make the panel look
+   * idle while it was working.
+   */
+  private get answerSummary(): string {
+    const busy = answerDesk.generatingCount;
+    if (busy) return busy === 1 ? '1 generating' : `${busy} generating`;
+    const found = answerDesk.entries.length;
+    if (!found) return 'no questions found yet';
+    const answered = answerDesk.entries.filter((e) => !!e.draft?.content).length;
+    return `${answered}/${found} answered`;
+  }
 
   <template>
     <header class="wb__head">
@@ -215,14 +231,11 @@ export default class Workbench extends Component {
       </Section>
 
       <Section @id="answers" @sections={{this.sections}}>
-        <DraftBox
-          @label="Draft answer"
-          @value={{this.draft}}
-          @onInput={{this.updateDraft}}
-        />
+        <AnswerDeskCard />
         <p class="wb__hint">
           Click into the page, type in a form, switch tabs — then look back.
-          The draft is still here and the timer never restarted.
+          Every draft is still here and the timer never restarted. That is the
+          whole architectural argument, and this is the surface it was made for.
         </p>
       </Section>
 
