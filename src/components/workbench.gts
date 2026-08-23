@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import DraftBox from './draft-box.gts';
 import PermissionProbe from './permission-probe.gts';
 import SectionSet from './section-set.gts';
+import Segmented from './segmented.gts';
 import Section from './section.gts';
 import ConnectCard from './connect-card.gts';
 import SendCard from './send-card.gts';
@@ -94,7 +95,13 @@ export default class Workbench extends Component {
     return theme;
   }
 
-  toggleTheme = (): void => theme.toggle();
+  themeOptions = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: 'System' },
+  ];
+
+  setTheme = (mode: string): void => theme.setMode(mode);
 
   private get manifestVersion(): string {
     try {
@@ -133,32 +140,20 @@ export default class Workbench extends Component {
 
   <template>
     <header class="wb__head">
-      <button
-        type="button"
-        class="wb__theme"
-        title="Toggle light / dark"
-        aria-label="Toggle light or dark theme"
-        {{on "click" this.toggleTheme}}
-      >
-        {{#if this.theme.isDark}}
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-          </svg>
-        {{else}}
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round">
-            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
-          </svg>
-        {{/if}}
-      </button>
       <h1 class="wb__title">Career Caddy</h1>
       <p class="wb__sub">Glimmer · side panel · <code class="wb__build">{{this.build}}</code></p>
     </header>
 
     <ConnectCard />
+
+    <div class="wb__prefs">
+      <Segmented
+        @label="Theme"
+        @options={{this.themeOptions}}
+        @value={{this.theme.mode}}
+        @onSelect={{this.setTheme}}
+      />
+    </div>
 
     <SectionSet @sections={{this.sections}} />
 

@@ -9,6 +9,7 @@ import { on } from '@ember/modifier';
 // exported by @ember/helper", which reads like a missing dependency and is
 // precisely the opposite.
 import { fn } from '@ember/helper';
+import Segmented from './segmented.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
 import type { LayoutMode } from '../state/layout.ts';
@@ -32,26 +33,29 @@ export default class SectionSet extends Component<SectionSetSignature> {
     return layout.mode === 'tabs';
   }
 
+  layoutOptions = [
+    { value: 'accordion', label: 'Accordion' },
+    { value: 'tabs', label: 'Tabs' },
+  ];
+
   isActive = (id: string): boolean => layout.activeId === id;
   select = (id: string): void => layout.toggle(id);
-  setMode = (mode: LayoutMode): void => layout.setMode(mode);
+  setMode = (mode: string): void => layout.setMode(mode as LayoutMode);
+
+  get mode(): LayoutMode {
+    return layout.mode;
+  }
 
   <template>
     <div class="sset" ...attributes>
       {{! Temporary, while the IA is decided by use rather than by argument.
           Once one layout clearly wins, delete the switch and the loser. }}
-      <div class="sset__switch" role="group" aria-label="Layout">
-        <button
-          type="button"
-          class="sset__switch-btn {{unless this.isTabs 'is-on'}}"
-          {{on "click" (fn this.setMode "accordion")}}
-        >Accordion</button>
-        <button
-          type="button"
-          class="sset__switch-btn {{if this.isTabs 'is-on'}}"
-          {{on "click" (fn this.setMode "tabs")}}
-        >Tabs</button>
-      </div>
+      <Segmented
+        @label="Layout"
+        @options={{this.layoutOptions}}
+        @value={{this.mode}}
+        @onSelect={{this.setMode}}
+      />
 
       {{#if this.isTabs}}
         <div class="sset__tabs" role="tablist">

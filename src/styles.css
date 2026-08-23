@@ -275,28 +275,6 @@ h1 {
 }
 
 /* ── Section set: accordion or tabs over the same content ─────────────── */
-.sset__switch {
-  display: flex;
-  gap: 0;
-  margin-bottom: 12px;
-}
-.sset__switch-btn {
-  flex: 1 1 auto;
-  padding: 4px 8px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  cursor: pointer;
-}
-.sset__switch-btn:first-child { border-radius: 5px 0 0 5px; }
-.sset__switch-btn:last-child { border-radius: 0 5px 5px 0; border-left: 0; }
-.sset__switch-btn.is-on {
-  color: var(--text);
-  background: var(--bg-soft);
-  border-color: var(--accent-500);
-}
 
 .sset__tabs {
   display: flex;
@@ -511,22 +489,6 @@ h1 {
 .send__incomplete-title { margin-top: 3px; font-weight: 600; line-height: 1.35; }
 .send__incomplete-company { font-size: 12px; color: var(--text-muted); }
 
-/* Theme toggle, floated to the header's trailing edge. */
-.wb__head { position: relative; }
-.wb__theme {
-  position: absolute;
-  top: 0;
-  right: 0;
-  padding: 2px 6px;
-  font-size: 14px;
-  line-height: 1;
-  color: var(--text-muted);
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  cursor: pointer;
-}
-.wb__theme:hover { color: var(--text); border-color: var(--border-strong); }
 
 /* Re-send, available but out of the way when the post is already known. */
 .send__again { margin-top: 4px; }
@@ -557,3 +519,29 @@ h1 {
   border-color: var(--accent-500);
   color: var(--accent-500);
 }
+
+/* ── Segmented control — layout and theme use the same widget ─────────── */
+.seg { display: flex; margin-bottom: 12px; }
+.seg__btn {
+  flex: 1 1 auto;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-left-width: 0;
+  cursor: pointer;
+}
+.seg__btn:first-child {
+  border-left-width: 1px;
+  border-radius: 5px 0 0 5px;
+}
+.seg__btn:last-child { border-radius: 0 5px 5px 0; }
+.seg__btn:hover { color: var(--text); }
+.seg__btn.is-on {
+  color: var(--accent-600);
+  background: var(--accent-50);
+  border-color: var(--accent-500);
+}
+.wb__prefs { margin-top: 10px; }

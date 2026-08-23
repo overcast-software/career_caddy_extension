@@ -66,12 +66,16 @@ class ThemeState {
   }
 
   /**
-   * Toggle resolves 'system' to its CURRENT appearance first, so the first
-   * click always flips what you can see. Toggling straight from 'system' to
-   * 'light' looks like nothing happened when the OS was already light.
+   * Three states, not two.
+   *
+   * A binary toggle can never get you BACK to 'system' — once you touch it
+   * you are pinned to an explicit choice forever, and the panel stops
+   * following the OS at sunset. light / dark / system is the pattern people
+   * already recognise, and it is the only one where every state is reachable.
    */
-  toggle = (): void => {
-    this.mode = this.isDark ? 'light' : 'dark';
+  setMode = (mode: string): void => {
+    if (!MODES.has(mode as ThemeMode)) return;
+    this.mode = mode as ThemeMode;
     this.apply();
     void this.persist();
   };
