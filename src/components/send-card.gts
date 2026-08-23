@@ -47,14 +47,21 @@ export default class SendCard extends Component {
   }
 
   /**
-   * Hide Send when the posting is already in the library and complete.
-   * Offering it invites a duplicate and buries the score you already have —
-   * <TrackedCard> is showing what we know instead.
+   * Known and nominally complete — so Send is DEMOTED, not removed.
    *
-   * An INCOMPLETE post is the exception: re-sending is then the useful action,
-   * because it refreshes an extraction that never finished.
+   * Removing it was a mistake. `complete` is a plain database column
+   * defaulting to TRUE, only flipped by "Mark incomplete", scrape-graph or
+   * the CompletenessReviewer. So a post nobody has ever reviewed reads as
+   * complete no matter how thin it actually is — Doug hit exactly this on a
+   * LinkedIn post whose Career Caddy detail page was empty: *"the details
+   * page was not filled out, I should have been granted an opportunity to
+   * use ext sender."*
+   *
+   * The flag says "nothing has flagged this", not "this is good". Treating
+   * it as the latter took away the one action that fixes it. The tracked
+   * card still leads; re-sending is available underneath, quietly.
    */
-  get alreadyKnown(): boolean {
+  get isDemoted(): boolean {
     return trackedPost.isKnown && !trackedPost.needsRefresh;
   }
 
@@ -193,8 +200,33 @@ export default class SendCard extends Component {
       <p class="wb__hint">
         You're on Career Caddy itself — nothing to send from here.
       </p>
-    {{else if this.alreadyKnown}}
-      {{! TrackedCard is showing it. Nothing to offer. }}
+    {{else if this.isDemoted}}
+      {{! TrackedCard leads. Re-sending stays reachable but out of the way —
+          a thin-but-unflagged post is exactly the case that needs it. }}
+      <details class="send__again">
+        <summary class="send__again-toggle">Send this page again</summary>
+        <p class="send__again-why">
+          Refreshes the post from what's on screen now. Useful when the
+          details in Career Caddy look thin or the posting has changed.
+        </p>
+        <label class="send__opt">
+          <input
+            type="checkbox"
+            checked={{this.autoScore}}
+            {{on "change" this.toggleAutoScore}}
+          />
+          Score it after parsing
+        </label>
+        <button
+          type="button"
+          class="send__btn send__btn--quiet"
+          disabled={{this.isBusy}}
+          {{on "click" this.send}}
+        >{{if this.isBusy "Sending…" "Re-send to refresh"}}</button>
+        {{#if this.status}}
+          <p class="send__status send__status--{{this.kind}}">{{this.status}}</p>
+        {{/if}}
+      </details>
     {{else}}
       <p class="send__heading">{{this.heading}}</p>
 

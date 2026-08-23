@@ -527,3 +527,33 @@ h1 {
   cursor: pointer;
 }
 .wb__theme:hover { color: var(--text); border-color: var(--border-strong); }
+
+/* Re-send, available but out of the way when the post is already known. */
+.send__again { margin-top: 4px; }
+.send__again-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.send__again-toggle::-webkit-details-marker { display: none; }
+.send__again-toggle::before { content: '▸ '; }
+.send__again[open] .send__again-toggle::before { content: '▾ '; }
+.send__again-toggle:hover { color: var(--accent-500); }
+.send__again-why {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.send__btn--quiet {
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+}
+.send__btn--quiet:hover:not(:disabled) {
+  background: var(--bg-soft);
+  border-color: var(--accent-500);
+  color: var(--accent-500);
+}
