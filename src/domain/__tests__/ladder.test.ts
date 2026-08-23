@@ -111,7 +111,7 @@ describe('verifyByToken', () => {
     // filter[query] also searches description/company, so a search hit alone
     // is not evidence — the link re-check is what makes it one.
     const rows = [{ id: '1', link: 'https://x.com/jobs/other' }];
-    expect(verifyByToken(rows, tok, null)).toBeNull();
+    expect(verifyByToken(rows, tok)).toBeNull();
   });
 
   it('accepts exactly one verified row', () => {
@@ -119,7 +119,7 @@ describe('verifyByToken', () => {
       { id: '1', link: `https://x.com/jobs/${tok}` },
       { id: '2', link: 'https://x.com/jobs/nope' },
     ];
-    expect(verifyByToken(rows, tok, null)?.id).toBe('1');
+    expect(verifyByToken(rows, tok)?.id).toBe('1');
   });
 
   it('returns NOTHING when two rows verify — ambiguity is not a weak answer', () => {
@@ -129,13 +129,23 @@ describe('verifyByToken', () => {
       { id: '1', link: `https://x.com/a/${tok}` },
       { id: '2', link: `https://x.com/b/${tok}` },
     ];
-    expect(verifyByToken(rows, tok, null)).toBeNull();
+    expect(verifyByToken(rows, tok)).toBeNull();
   });
 
-  it('applies the referrer constraint', () => {
-    const rows = [{ id: '1', link: `https://x.com/jobs/${tok}` }];
-    expect(verifyByToken(rows, tok, 'y.com')).toBeNull();
-    expect(verifyByToken(rows, tok, 'x.com')?.id).toBe('1');
+  it('does NOT apply a referrer constraint — the live case that proved it', () => {
+    // On jobs.ashbyhq.com/rescale/…/application?jr_id=6a760761bb6ca93ae56107ee
+    // the token matched exactly one post, whose link was
+    // jobright.ai/jobs/info/6a760761bb6ca93ae56107ee — the SAME id. Certain
+    // evidence. The legacy's hostAgrees check demanded the post's host equal
+    // the referrer (ashbyhq.com, from an in-SPA tab move) and discarded it.
+    //
+    // A verified 16+ char token in the link is not fuzzy evidence, so the
+    // constraint can only ever reject true matches — and it rejects the
+    // COMMON case: you came via an aggregator, and the post's link IS the
+    // aggregator's URL.
+    const real = '6a760761bb6ca93ae56107ee';
+    const rows = [{ id: 'omta3lGjAd', link: `https://jobright.ai/jobs/info/${real}` }];
+    expect(verifyByToken(rows, real)?.id).toBe('omta3lGjAd');
   });
 });
 

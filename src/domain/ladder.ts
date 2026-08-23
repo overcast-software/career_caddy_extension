@@ -197,25 +197,40 @@ export function pickPageTitle(
 
 /**
  * T4 verification: a searched row only counts if its link ACTUALLY contains
- * the token, and it agrees with any referrer constraint.
+ * the token.
  *
  * The search is a `filter[query]` across title/description/company/link, so it
  * happily returns rows that merely mention the token somewhere. Re-checking
  * the link is what turns a search hit into evidence.
+ *
+ * DELIBERATE DEVIATION FROM THE LEGACY: no referrer constraint here.
+ *
+ * The legacy applied `hostAgrees` to T4 as well as T5. That is wrong, and it
+ * was caught live. On
+ * `jobs.ashbyhq.com/rescale/…/application?jr_id=6a760761bb6ca93ae56107ee`
+ * the token matched exactly one post — whose link was
+ * `jobright.ai/jobs/info/6a760761bb6ca93ae56107ee`, the same id. Correct
+ * answer, certain evidence. But the referrer was ashbyhq.com (an
+ * Overview→Application move inside the SPA), so the constraint demanded the
+ * post's host equal ashbyhq.com and threw the match away.
+ *
+ * The constraint exists to keep FUZZY tiers honest — titles are common, so T5
+ * needs narrowing. A 16+ character token verified to appear in the
+ * candidate's link is not fuzzy; a false positive would need an unrelated post
+ * whose link contains that exact string. So here the constraint can only ever
+ * reject true matches, and it rejects precisely the common case: you arrived
+ * from an aggregator, and the post's link IS the aggregator's URL.
+ *
+ * Ambiguity is still handled, by the exactly-one rule below — which is the
+ * safety property that actually matters and does not depend on the referrer.
  *
  * Returns a single candidate ONLY when exactly one survives. Ambiguity is not
  * a weak answer here, it is no answer — two plausible posts means the ladder
  * has not identified anything, and picking one would be a coin flip presented
  * as a fact.
  */
-export function verifyByToken<T extends Candidate>(
-  rows: T[],
-  token: string,
-  constraintHost: string | null,
-): T | null {
-  const verified = rows.filter(
-    (r) => r && r.id && r.link && r.link.includes(token) && hostAgrees(r, constraintHost),
-  );
+export function verifyByToken<T extends Candidate>(rows: T[], token: string): T | null {
+  const verified = rows.filter((r) => r && r.id && r.link && r.link.includes(token));
   return verified.length === 1 ? (verified[0] ?? null) : null;
 }
 

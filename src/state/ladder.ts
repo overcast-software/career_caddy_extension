@@ -170,7 +170,9 @@ class LadderRunner {
         const rows = await search(token);
         if (stale()) return;
         if (!rows) continue;
-        const hit = verifyByToken(rows, token, constraintHost);
+        // No constraintHost: see verifyByToken's note. A verified token match
+        // is direct evidence, and the referrer can only reject true ones.
+        const hit = verifyByToken(rows, token);
         if (hit) return settle(hit, 'a matching job id');
       }
 
