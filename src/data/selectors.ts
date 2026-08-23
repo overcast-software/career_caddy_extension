@@ -24,6 +24,14 @@ export interface SelectorBundle {
   /** Server's per-domain verdict. Annotation only — never branches the send. */
   knownGood: boolean;
   tier: string | null;
+  /**
+   * The ScrapeProfile's own id, which this endpoint already returns as
+   * `data.id`. Carrying it here is what makes `resolveProfileId` free — the
+   * staff sharpen action needs it and would otherwise re-request the profile
+   * the panel has already fetched. Null for a baked fallback, which by
+   * definition has no server row behind it.
+   */
+  profileId: string | null;
 }
 
 /** Why the last fetch went the way it did, so the UI can be honest about it. */
@@ -59,6 +67,7 @@ const BAKED: Record<string, SelectorBundle> = {
     jobDataSelectors: {},
     knownGood: false,
     tier: null,
+    profileId: null,
   },
 };
 
@@ -200,6 +209,7 @@ export async function loadSelectors(
     // deprecated top-level copies are going away with the 2.x cutover.
     knownGood: attrs.is_known_good === true || attrs.readiness?.known_good === true,
     tier: attrs.readiness?.tier ?? null,
+    profileId: resp.data?.data?.id != null ? String(resp.data.data.id) : null,
   };
 
   lastOutcome = { host, ok: true, status: resp.status, from: 'network' };

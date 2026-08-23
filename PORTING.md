@@ -151,12 +151,33 @@ the panel had no way to say it.
 Read on demand, not per navigation — it costs a scripting call, and the
 standing rule is no extra page reads for convenience.
 
-**Remaining:** `renderProposedPost` `createFromProposed` `handleEnrich`
-`pushEnrichTrace` `handleRecheck` `resolveProfileId` `refreshStaffFlag`
-(`refreshStaffFlag` is effectively covered by `state/me.ts`'s `isStaff`).
+**Done:** `handleEnrich` ✅ `resolveProfileId` ✅ `refreshStaffFlag` ✅
+(the last is `state/me.ts`'s `isStaff`).
 
-⚠ `handleEnrich` is a **no-op stub that reports success** in the legacy too
-(CCEXT-11). Port the honest version or omit it; do not port the lie.
+`resolveProfileId` costs **nothing** — `extension-selectors` already returns the
+profile as `data.id`, and the panel had been throwing it away. It is now carried
+on `SelectorBundle.profileId`, so the sharpen action re-requests nothing.
+
+**`handleEnrich` — ported honestly, which meant changing what it says.**
+CCEXT-11 said the button was a no-op reporting success; I checked whether that
+is still true rather than trusting it, and it is. `lib/tasks.py`'s
+`sharpen_scrape_profile` appends a `[sharpen-request <iso>]` line to
+`extraction_hints`, logs *"request recorded; awaiting enhancer pass"*, and
+returns `status: "requested"`. The rewriting sits behind a comment reading
+`# ENHANCER INTEGRATION POINT` and runs out-of-process, operator-driven.
+
+**The api was never the liar** — it says "requested" and means it. The lie was
+entirely presentational. `SharpenResult` therefore has no `sharpened` case to
+render, so the honest wording is not a thing anyone has to remember to write.
+
+**`pushEnrichTrace` — NOT PORTED, and it is the server that retired it.**
+`meta.job_id` is now permanently `null`; the view says so in as many words —
+the sharpen-status lookup is *"vestigial (retired with django_q in CC-208); the
+live frontend does not poll it"*. Porting the poll loop would have queried a
+dead endpoint forever and rendered the silence as progress. Found by reading
+the endpoint, which is the whole argument for `CONTRACTS.md`.
+
+**Remaining:** `renderProposedPost` `createFromProposed` `handleRecheck`
 
 **Original notes:**
 `renderProposedPost` `createFromProposed` `populateDevHints` `_setDevHint`

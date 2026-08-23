@@ -25,6 +25,8 @@ export interface PageHints {
   /** Server's per-domain verdict. Annotation only — never branches a send. */
   knownGood: boolean;
   tier: string | null;
+  /** The host's ScrapeProfile id, for the staff sharpen request. Free here. */
+  profileId: string | null;
 }
 
 const EMPTY: PageHints = {
@@ -35,6 +37,7 @@ const EMPTY: PageHints = {
   closedEvidence: null,
   knownGood: false,
   tier: null,
+  profileId: null,
 };
 
 /**
@@ -73,5 +76,6 @@ export async function collectHints(url: string): Promise<PageHints> {
     closedEvidence: raw.closedEvidence,
     knownGood: bundle?.knownGood ?? false,
     tier: bundle?.tier ?? null,
+    profileId: bundle?.profileId ?? null,
   };
 }
