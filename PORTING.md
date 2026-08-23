@@ -80,6 +80,18 @@ blur could remember across a re-open. A panel does not need it. **Decide per
 function whether the panel makes it unnecessary — and record the decision, so
 "dropped deliberately" stays distinguishable from "forgotten".**
 
+## Tickets
+
+| Subsystem | Ticket | Functions |
+|---|---|---|
+| Signal ladder / match application | **CCEXT-50** | 22 |
+| Apply attribution | **CCEXT-51** | 9 |
+| Page stash / viewed posts (triage) | **CCEXT-52** | 10 |
+| Answer desk | CCEXT-45 | 20 |
+| Staff / proposed / dev-hints | CCEXT-49 | 10 |
+
+Epic: **CCEXT-43**.
+
 ## How to work this list
 
 1. Read the legacy function. Not the name — the body and its comments, which
