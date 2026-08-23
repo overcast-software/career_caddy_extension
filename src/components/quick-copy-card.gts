@@ -38,13 +38,14 @@ export default class QuickCopyCard extends Component {
   }
 
   /**
-   * /settings/profile/edit, NOT /settings/quick-copy.
+   * /settings/quick-copy — the route that owns snippet editing as of frontend
+   * c11e413 (PR #244).
    *
-   * The legacy pointed at /settings/quick-copy and 404s (CCEXT-36): that route
-   * only exists on frontend branch feature/ccext18-quick-copy, which has never
-   * merged to main — CCEXT-20 is marked Done on the board but the code is not
-   * in the deployed app. Until it lands, profile/edit is where `links` is
-   * actually editable. Move this the day that branch merges.
+   * This pointed at /settings/profile/edit while CCEXT-20 sat unmerged. That
+   * is now WORSE than wrong rather than merely suboptimal: the merge strips
+   * the editing UI out of profile/edit, leaving only a nav link, so the old
+   * target lands on a page where the feature is gone. Verified against
+   * origin/main, not assumed.
    */
   get layout(): typeof layout {
     return layout;
@@ -53,7 +54,7 @@ export default class QuickCopyCard extends Component {
   toggleExpanded = (): void => layout.toggleQuickCopy();
 
   get editUrl(): string {
-    return `${FRONTEND_ORIGIN}/settings/profile/edit`;
+    return `${FRONTEND_ORIGIN}/settings/quick-copy`;
   }
 
   copy = (item: QuickCopyItem): void => {

@@ -5,11 +5,14 @@
  * GitHub, and whatever prose you have got tired of retyping.
  *
  * THIS CONTRACT IS SHARED with the web app's `app/utils/quick-copy.js`, and
- * the two have already drifted once — the web side ships icons
- * {linkedin,github,globe,text} while the extension moved to golf keys
- * {flag,golfer,trophy,target,finish} with a back-compat map. That drift is
- * survivable only because normalization is forgiving in both directions; keep
- * it that way, and prefer widening the map over renaming a key.
+ * as of frontend c11e413 the two AGREE exactly: same CUSTOM_ICONS, same
+ * DEFAULT_CUSTOM_ICON of 'flag', same LEGACY_ICON_MAP of
+ * {globe: 'flag', text: 'golfer'}. Verified against origin/main.
+ *
+ * They did drift — the web side shipped {globe, text} for a while — and the
+ * merge closed it. Two copies of one contract will drift again; what keeps
+ * that survivable is that normalization is forgiving in BOTH directions, so
+ * prefer widening the map over renaming a key.
  *
  * Worth knowing before changing anything here: the real stored data does NOT
  * look like the contract. A live profile's `links` entries are
