@@ -29,9 +29,15 @@ Every divergence gets a verdict:
 
 ## Status
 
-Client half: **complete** — grepped from `src/`, not recalled.
-Server half: **the ingestion trace has landed and is verified below.** The
-endpoint-by-endpoint and blast-radius passes are still running.
+**COMPLETE.** Client half grepped from `src/`; server half traced through the
+views and verified line by line. Every PENDING verdict below is resolved.
+
+Read alongside:
+- `architecture/arch-extension-direct-send-path-what-it-drops` in claudex, and
+  its mermaid diagram at `flowcharts/extension-direct-pipeline.md`
+- `architecture/arch-ingest-pipeline-extension-source-of-truth` — the trust
+  ladder and dedupe. Its own flowchart predates extension-direct; this file
+  and the one above cover what it does not.
 
 ---
 
@@ -175,9 +181,20 @@ apply_url, canonical_link_hint, referrer_url, structured_prefill
 > `referrer_url` **top-level**. extension-direct nests them under
 > `captured_payload.extraction_hints`. Same three fields, two shapes.
 >
-> **Verdict: PENDING** — needs the server half. If the api reads both, this is
-> UNDOCUMENTED and belongs in a comment. If it reads only one, one path has
-> been silently dropping hints since it was written.
+> **Verdict: BOTH SHAPES ARE READ — but not the same fields.**
+>
+> `from_text` reads all three top-level (`scrapes.py:1046-1057`).
+> extension-direct reads `captured_payload.extraction_hints` at `:671` and
+> `:822` — **but only `structured_prefill`.**
+>
+> So `canonical_link_hint` and `referrer_url` **are silently dropped on the
+> fast path.** The extension builds them (`send-gate.ts:126-127`) and nothing
+> reads them. That kills LinkedIn `og:url` canonicalization and the
+> referrer→ATS click-through pairing — both real features with server support,
+> inert in practice.
+>
+> **Verdict: API GAP.** Two shapes is survivable and worth a comment; two
+> shapes where one silently drops two of three fields is a bug.
 
 > ### ⚠ DIVERGENCE 2 — `auto_score` is sent on only one path
 >
@@ -240,7 +257,16 @@ apply_url, canonical_link_hint, referrer_url, structured_prefill
 > (`views/jobs.py:465`). Not `apply_url`. Measured: searching for a token that
 > appears only in an `apply_url` returns nothing.
 >
-> **Verdict: PENDING** — may be deliberate. Matters for the ladder's T4.
+> **Verdict: CONFIRMED, and correct as designed.** `filter[query]` spans
+> title / description / company name / display_name / link
+> (`jobs.py:462-471`). `filter[link]` is the one that also matches `apply_url`
+> — `Q(link=x) | Q(apply_url=x) | Q(canonical_link=canon) | Q(apply_url=canon)`
+> (`jobs.py:281-283`), indexed by `migrations/0130_jobpost_apply_url_hash_idx`.
+>
+> Two behaviours of `filter[link]` the extension depends on without saying so:
+> it **bypasses the six-clause per-user visibility filter entirely**
+> (`jobs.py:275`, deliberate, documented at `:250-258`) — so **cross-user posts
+> come back** — and it is exempt from the default closed-post exclusion.
 
 ### Applications
 
@@ -253,9 +279,35 @@ apply_url, canonical_link_hint, referrer_url, structured_prefill
 
 > ### ⚠ DIVERGENCE 5 — one endpoint, two body shapes
 >
-> Track sends a JSON:API envelope; CC-135 sends a flat body. Both are said to
-> be accepted. **Verdict: PENDING** — if true it is UNDOCUMENTED and worth a
-> comment at both call sites, because it looks like a bug to any reader.
+> Track sends a JSON:API envelope; CC-135 sends a flat body.
+>
+> **Verdict: CONFIRMED — both are genuinely accepted.** `jobs.py:2075-2077`:
+> `attrs = (node.get("attributes") if node else None) or data`. The
+> match-trigger branch fires only when one of `referrer`/`page_title`/
+> `text_excerpt` is truthy (`:2079-2083`), is **staff-gated** (`:2128-2132`),
+> and returns **202** rather than 201.
+>
+> Inside that branch only `tracking_url` and `status` are read from the body;
+> `page_title` is truncated to 500 chars and `text_excerpt` to 8000
+> (`models/job_application.py:41`). The server then OVERWRITES `match_context`
+> with its own struct. Any `job-post` relationship sent is ignored.
+>
+> UNDOCUMENTED — worth a comment at both call sites, because it reads as a bug.
+
+> ### ⛔ DIVERGENCE 7 — the extension waits for a status the api never emits
+>
+> `state/match-app.ts:163` treats the run as finished on
+> `status === 'failed' || status === 'no_match'`.
+>
+> **`'no_match'` does not exist.** The server emits only `pending` / `done` /
+> `failed` (`models/job_application.py:43-45`). A legitimate "searched, found
+> nothing" outcome is **`done` with `job_post_id = None`** and
+> `rationale = "no candidates"`.
+>
+> So that case falls through the poll loop and times out at `POLL_MAX` with
+> *"Still looking — it will be here when you come back."* — when in fact the
+> answer arrived and was "no". **Verdict: CLIENT WRONG.** Handle `done`:
+> a pick means matched, no pick means no match.
 
 ### Scoring
 
@@ -291,20 +343,162 @@ Client reads `apply_button_selectors`, `canonical_link_selectors`,
 `GET /api/v1/scrapes/:id?include=job-post` — polled on a `chrome.alarms`
 cadence, terminal on `completed`/`failed`/`error`/`cancelled`.
 
-> **Verdict: PENDING** — that terminal set was written from the statuses seen
-> in a live listing, not from the server's own enum. If the server can emit a
-> terminal status outside it, the worker polls 20 times and gives up silently.
-> **Find the authoritative status list.**
+> **Verdict: SAFE, BY LUCK — there is no authoritative enum to conform to.**
+>
+> `Scrape.status` is a bare `CharField` with **no `choices`**
+> (`models/scrape.py:56`). Four lists disagree across the codebase: the seed
+> migration (`0039`), `_SWEEPABLE_STATUSES` in `lib/tasks.py:992` (four of
+> which are not in the seed), the frontend's `pollable.js:7`, and ours.
+>
+> The complete set the api actually emits is
+> `hold · pending · running · extracting · updating_profile · completed · failed`.
+> The worker's `error` and `cancelled` are **dead entries**; it misses nothing.
+> `state/score.ts` correctly uses a *different* terminal set for Score, which
+> is a separate vocabulary (`completed`/`failed`).
 
 ---
 
-## Open questions for the server half
+## Blast radius — what a proposed api change would break
 
-1. Does extension-direct read `extraction_hints.*`, or only the top-level form
-   `from-text` uses? (Divergence 1)
-2. What is the authoritative Scrape status enum?
-3. Does `POST /job-applications/` genuinely accept both body shapes?
-4. What is the synchronous "Phase B consume" path in
-   `test_scrape_extension_direct.py`, and when does it create a JobPost without
-   an LLM parse?
-5. Why do only 3 of 100 recent posts have an `apply_url`? Which routes write it?
+Answered so the phase-2 fixes can be sequenced without guessing.
+
+### Removing the deprecated top-level `known_good`/`tier`/`reasons`
+
+**Breaks three api test assertions and nothing else.**
+
+| Reader | Verdict |
+|---|---|
+| `api/.../tests/test_scrape_profile_known_good.py:256,257,280,281` | fix in the same PR |
+| `api/.../tests/test_scrape_profile_extension_selectors.py:110-113` | fix in the same PR |
+| the retired 2.x `popup.js` | **dead** — frontend dropped it at `95aad96`; survives only on unmerged branches |
+| `automation` | **unaffected** — reads `is_known_good` off the FULL `/scrape-profiles/?filter[hostname]=` resource, which has emitted that name since PR #185 |
+| `frontend` | **zero readers** — `app/models/scrape-profile.js` does not even declare the attrs |
+| `agents` | writes `extension_selectors`, never reads readiness |
+| the new extension | already reads the canonical location — starts working the moment this lands |
+
+### Honouring `auto_score` on `POST /scrapes/`
+
+**Real double-scoring risk. Do not default it on.**
+
+Seven things can already start a score: `_auto_score_job_post` (only ever
+called by `parse_scrape_job`, i.e. from-text), `POST /scores/`, the extension's
+own background worker, the extension panel's manual button, the frontend's
+`list.js:37` after a scrape, and the agents score poller.
+
+Concretely, if the api starts scoring on this path: the worker ALSO scores
+~30s later, `enqueue` has no dedup key, and `POST /scores/` **resets an
+existing row to pending** (`scores.py:203-210`) — so the user watches a score
+land, revert to pending, and land again, possibly with a different number. No
+duplicate rows (a unique constraint holds); duplicate cost and visible
+flapping.
+
+Worse, `from_text` treats **absent as `True`** (`:1044`). Copying that default
+into `create` would start scoring for every existing caller that omits the flag
+— frontend (6 sites), agents MCP, `scrape_graph`, automation. Given the
+documented seven-week cost incident in `automation/scripts/inbox_triage.py:398-418`,
+**default `False` on `create`.**
+
+**And if the api takes ownership, delete the worker's `beginScore` in the same
+PR.** Two owners is the bug.
+
+> Bonus finding: `Profile.auto_score` (`models/profile.py:35`) is **never read
+> by any scoring decision** — only written and serialized. `score_poller.py`'s
+> docstring claims the server enforces it. It does not. That field is an
+> unwired per-user kill switch, and it is what the extension should seed its
+> checkbox from instead of hardcoding `true` (`send-card.gts:35`).
+
+---
+
+## Smaller findings worth acting on
+
+- **`POST /scores/` is not idempotent.** An existing `(job_post, resume, user)`
+  Score is reset to pending and re-enqueued (`scores.py:203-217`), with no
+  guard for one already pending.
+- **A score of exactly `1` renders as `100%`.** Scores are integers 1–100
+  (`scores.py:258`); `background.ts:319` hedges `value <= 1 ? value*100 : value`.
+  Harmless in practice, wrong at the boundary.
+- **`failure_reason` is returned and unread.** It is the operator-facing "why
+  didn't my post appear" answer; the worker instead says a generic
+  *"Couldn't parse the posting from {host}."* Reading it would make the
+  extractor-refusal work (api #250) visible to the user.
+- **`explanation` on a Score is unread** — the full LLM rationale, arguably the
+  most useful field on the resource.
+- **API keys never expire.** The extension does not send `expires_days`
+  (`admin.py:266`), so the minted `jh_*` key is permanent.
+- **`PATCH /job-posts/:id` is staff-OR-owner** (`jobs.py:983-985`). Since
+  `filter[link]` returns cross-user posts, the link picker can legitimately
+  receive a 403 — which is exactly why `setApplyUrl` returns a boolean.
+- **`include` is silently ignored** on `/scores/` and `/scrape-profiles/`;
+  **`sort` is silently ignored** on `/scores/`, `/scrape-profiles/`,
+  `/questions/`, `/answers/`. No 400 — they just do nothing.
+- **Dead code in `lib/api.ts`:** the `noContentType` option exists solely for
+  `scrape-profiles/:id/sharpen/`, which the new extension never calls. Same for
+  the `ccAnswerDrafts` storage key — a legacy leftover with no writer.
+
+---
+
+## What NOT to copy from the neighbours
+
+- **`automation`'s `ApiClient._ok`** collapses any non-2xx into
+  `error="<status> - <text>"`, destroying the structured error body. Downstream
+  code has to *string-match* `"duplicate_job_post"` to recognise a 409
+  (`inbox_triage.py:420-427`). Our `ApiResult<T>` keeps `status` separate and
+  parses `errors[0].detail` — keep it that way.
+- **There is no shared JSON:API util anywhere.** Frontend uses Ember Data;
+  automation and agents each hand-roll. Nothing to conform to. The one pattern
+  worth borrowing is `automation/src/client/models.py` — **validate at the
+  model boundary, not at the call site.**
+- **The OpenAPI schema is a route index, not a contract.** `drf-spectacular` is
+  served at `/api/schema/` but no artifact is committed and CI never generates
+  or diffs it. It documents 5 of the ~14 filters `JobPostViewSet` implements.
+
+---
+
+## Answers to the questions this file opened with
+
+1. **Does extension-direct read `extraction_hints.*`?** Only
+   `structured_prefill`. `canonical_link_hint` and `referrer_url` are dropped.
+2. **What is the authoritative Scrape status enum?** There isn't one —
+   `status` is a bare `CharField` with no `choices`, and four lists in the
+   codebase disagree. Emitted set:
+   `hold · pending · running · extracting · updating_profile · completed · failed`.
+3. **Does `POST /job-applications/` accept both body shapes?** Yes —
+   `attrs = node.get("attributes") or data`.
+4. **What is the "Phase B consume" path?** `_consume_extension_direct_payload`
+   (`scrapes.py:712`), synchronous and in-request. It creates the JobPost with
+   no LLM whenever `structured_prefill` yields a title and a company.
+5. **Why do only 3 of 100 posts have an `apply_url`?** Five writers exist and
+   the fast path is none of them. The one route that honours `apply_url` is
+   `from-text`, which CC-176 made unreachable. The surviving few are the
+   user-driven link picker.
+
+---
+
+## The divergence ledger
+
+Every finding, with its verdict, in priority order. This is the phase-2 work
+list.
+
+| # | Finding | Verdict | Fix lands in |
+|---|---|---|---|
+| **0** | `POST /scrapes/` is staff-only; the gate fires before `source_mode` is known | **OPEN — product decision** | api (+ client message either way) |
+| **0b** | `create()` is not atomic; the row is briefly claimable at `'hold'` | **API GAP** | api |
+| **H** | Tier-0 drops `apply_url`, never writes `job_content`, skips CompletenessReviewer, persists no `html` | **API GAP** | api |
+| **1** | `canonical_link_hint` + `referrer_url` dropped on the fast path | **API GAP** | api |
+| **2** | `auto_score` absent from `POST /scrapes/` | **API GAP, worked around** | decide owner first |
+| **3** | closed evidence detected, never sent, and undetectable server-side on this path | **API GAP** | api (persist `job_content`) |
+| **7** | client waits for `'no_match'`, a status the api never emits | **CLIENT WRONG** | extension |
+| **6** | client reads `is_known_good`/`readiness`; prod serves top-level | **API GAP, half-built, UNCOMMITTED** | api — **do this first** |
+| **4** | `filter[query]` does not search `apply_url` | **correct as designed** | — |
+| **5** | two body shapes on `POST /job-applications/` | **UNDOCUMENTED** | comments |
+| — | `filter[link]` bypasses per-user visibility | **UNDOCUMENTED** | comment |
+| — | worker terminal set has two dead entries | **harmless** | — |
+
+**Sequence.** #6 first — it is already written, backwards-compatible, and
+sitting uncommitted in the `api/` working tree; leaving it there blocks
+everything else. Then the headline cluster (H, 1, 3) as one api change, since
+persisting `job_content` and reading the hints are the same edit. #7 is
+client-only and can go any time. #0 waits on a decision.
+
+**Every api change extends the contract tests named at the top of this file, in
+the same PR.** That is what stops this document from rotting into fiction.
