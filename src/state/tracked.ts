@@ -1,6 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 import { request } from '../lib/api.ts';
-import type { JsonApiListDoc, JsonApiResource } from '../lib/api.ts';
+import type { JsonApiListDoc } from '../lib/api.ts';
+import { toJobPost } from '../domain/job-post.ts';
+import type { JobPost, JobPostAttrs } from '../domain/job-post.ts';
 import { classifyUrl } from '../domain/url-policy.ts';
 import { page } from './page.ts';
 import { session } from './session.ts';
@@ -17,37 +19,11 @@ import { session } from './session.ts';
  * shows what it knows instead of what it could do.
  */
 
-export interface TrackedPost {
-  id: string;
-  title: string;
-  company: string | null;
-  companyId: string | null;
-  applyUrl: string | null;
-  link: string | null;
-  topScore: number | null;
-  /** A score is already running; do not offer to start another. */
-  hasPendingScore: boolean;
-  /**
-   * The api's own judgement that this post is fully extracted. Defaults TRUE
-   * when absent so an older api never produces a spurious "incomplete"
-   * caption; when explicitly false, offer Send so the user can refresh it.
-   */
-  complete: boolean;
-}
-
 export type LookupState = 'idle' | 'looking' | 'found' | 'none';
-
-interface JobPostAttrs {
-  title?: string;
-  apply_url?: string | null;
-  link?: string | null;
-  top_score?: number | null;
-  complete?: boolean;
-}
 
 class TrackedState {
   @tracked state: LookupState = 'idle';
-  @tracked post: TrackedPost | null = null;
+  @tracked post: JobPost | null = null;
 
   /** Same guard as page.ts, for the same reason — a slow lookup for tab A
    *  must never render into tab B. */
@@ -101,7 +77,20 @@ class TrackedState {
       return;
     }
 
-    this.post = toPost(item, resp.data.included ?? []);
+    this.post = toJobPost(item, resp.data.included ?? []);
+    this.state = 'found';
+  }
+
+  /**
+   * Accept a post the user linked by hand as the answer for this page.
+   *
+   * Bumps the ticket so an in-flight lookup for this same page cannot land
+   * afterwards and overwrite a deliberate choice with a stale "none" — the
+   * user's action beats the network, always.
+   */
+  adopt(post: JobPost): void {
+    this.ticket++;
+    this.post = post;
     this.state = 'found';
   }
 
@@ -112,42 +101,7 @@ class TrackedState {
   }
 }
 
-function toPost(
-  item: JsonApiResource<JobPostAttrs>,
-  included: JsonApiResource[],
-): TrackedPost {
-  const attrs = item.attributes ?? {};
-  const companyRel = item.relationships?.['company']?.data ?? null;
-
-  const companyResource = companyRel
-    ? included.find(
-        (r) =>
-          (r.type === 'company' || r.type === 'companies') &&
-          String(r.id) === String(companyRel.id),
-      )
-    : undefined;
-
-  // A score still running anywhere on this post — including one started by
-  // another user — means "do not offer to score again", mirroring the api's
-  // cross-user top_score behaviour.
-  const hasPendingScore = included.some(
-    (r) =>
-      (r.type === 'score' || r.type === 'scores') &&
-      (r.attributes as { status?: string })?.status === 'pending',
-  );
-
-  return {
-    id: item.id,
-    title: attrs.title ?? '(untitled)',
-    company: (companyResource?.attributes as { name?: string })?.name ?? null,
-    companyId: companyRel ? String(companyRel.id) : null,
-    applyUrl: attrs.apply_url ?? null,
-    link: attrs.link ?? null,
-    topScore: typeof attrs.top_score === 'number' ? attrs.top_score : null,
-    hasPendingScore,
-    complete: attrs.complete === false ? false : true,
-  };
-}
+export type { JobPost as TrackedPost } from '../domain/job-post.ts';
 
 export const tracked_ = new TrackedState();
 export { tracked_ as trackedPost };

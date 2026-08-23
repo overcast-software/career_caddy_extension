@@ -47,8 +47,12 @@ export function ccCountUnreachableFrames(): number {
   let blocked = 0;
   const frames = document.querySelectorAll('iframe');
   for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i];
+    if (!frame) continue;
     try {
-      if (!frames[i].contentDocument) blocked++;
+      // Cross-origin frames throw here rather than returning null in some
+      // engines, so both paths have to count as blocked — that IS the signal.
+      if (!frame.contentDocument) blocked++;
     } catch {
       blocked++;
     }

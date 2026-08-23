@@ -9,6 +9,7 @@ import Section from './section.gts';
 import ConnectCard from './connect-card.gts';
 import SendCard from './send-card.gts';
 import TrackedCard from './tracked-card.gts';
+import LinkCard from './link-card.gts';
 import AccessGate from './access-gate.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
@@ -161,6 +162,7 @@ export default class Workbench extends Component {
         <AccessGate />
         <TrackedCard />
         <SendCard />
+        <LinkCard />
       </Section>
 
       <Section @id="answers" @sections={{this.sections}}>
