@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 import DraftBox from './draft-box.gts';
 import PermissionProbe from './permission-probe.gts';
 import SectionSet from './section-set.gts';
@@ -15,6 +16,7 @@ import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
+import { theme } from '../state/theme.ts';
 
 /**
  * The panel root.
@@ -53,6 +55,7 @@ export default class Workbench extends Component {
   constructor(owner: unknown, args: object) {
     super(owner, args);
     this.ticker = setInterval(() => (this.uptime += 1), 1000);
+    void theme.load();
     void layout.load();
     void session.load();
     page.start();
@@ -86,6 +89,12 @@ export default class Workbench extends Component {
   get build(): string {
     return `v${this.manifestVersion} · ${__BUILD__}`;
   }
+
+  get theme(): typeof theme {
+    return theme;
+  }
+
+  toggleTheme = (): void => theme.toggle();
 
   private get manifestVersion(): string {
     try {
@@ -124,6 +133,13 @@ export default class Workbench extends Component {
 
   <template>
     <header class="wb__head">
+      <button
+        type="button"
+        class="wb__theme"
+        title="Toggle light / dark"
+        aria-label="Toggle light or dark theme"
+        {{on "click" this.toggleTheme}}
+      >{{if this.theme.isDark "☀" "☾"}}</button>
       <h1 class="wb__title">Career Caddy</h1>
       <p class="wb__sub">Glimmer · side panel · <code class="wb__build">{{this.build}}</code></p>
     </header>

@@ -6,13 +6,14 @@
   "description": "Career Caddy browser extension \u2014 Glimmer UI, MV3, Chrome + Firefox.",
   "scripts": {
     "build": "npm run bump && npm run build:chrome && npm run build:firefox",
-    "build:chrome": "vite build --mode chrome && npm run gate -- chrome",
-    "build:firefox": "vite build --mode firefox && npm run gate -- firefox",
+    "build:chrome": "vite build --mode chrome && npm run gate -- chrome && npm run gate:injected -- chrome",
+    "build:firefox": "vite build --mode firefox && npm run gate -- firefox && npm run gate:injected -- firefox",
     "gate": "node scripts/csp-gate.mjs",
     "dev": "vite build --mode chrome --watch",
     "lint:firefox": "web-ext lint --source-dir dist/firefox",
     "package:firefox": "npm run build:firefox && web-ext build --source-dir dist/firefox --artifacts-dir web-ext-artifacts --overwrite-dest",
-    "bump": "node scripts/bump-build.mjs"
+    "bump": "node scripts/bump-build.mjs",
+    "gate:injected": "node scripts/injected-gate.mjs"
   },
   "dependencies": {
     "@glimmer/component": "^2.1.1",
@@ -24,6 +25,7 @@
     "@embroider/macros": "^1.20.6",
     "@embroider/vite": "^1.7.10",
     "@types/chrome": "^0.1.31",
+    "acorn": "^8.18.0",
     "babel-plugin-ember-template-compilation": "^4.0.0",
     "content-tag": "^4.2.0",
     "decorator-transforms": "^2.4.0",

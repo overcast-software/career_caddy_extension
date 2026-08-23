@@ -146,6 +146,12 @@ export default defineConfig(({ mode }) => {
       __TARGET__: JSON.stringify(target),
       __BUILD__: JSON.stringify(buildStamp()),
     },
+    // keepNames is what makes scripts/injected-gate.mjs able to check the
+    // bytes we actually ship. Minification otherwise mangles `ccGrabPayload`
+    // into a single letter and the gate silently finds nothing to inspect —
+    // a gate that passes because it looked at an empty set is worse than no
+    // gate, so this is load-bearing, not cosmetic.
+    esbuild: { keepNames: true },
     build: {
       outDir: `dist/${target}`,
       emptyOutDir: true,

@@ -42,7 +42,11 @@ jobs:
       # mode is "nobody can install it", not "one feature is broken". The way
       # it would regress is a stray import pulling in @ember/template-compiler,
       # which is built around new Function().
-      - name: Build (runs the CSP gate)
+      # Both gates run inside `npm run build`:
+      #   csp-gate      — no eval/new Function, or Chrome refuses to install
+      #   injected-gate — every ccXxx function is still self-contained, or it
+      #                   throws a ReferenceError in the PAGE console at runtime
+      - name: Build (runs the CSP and injected-scope gates)
         run: npm run build
 
       # Mozilla's own validator. Errors fail the build; warnings do not, but

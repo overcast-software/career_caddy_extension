@@ -1,32 +1,122 @@
-/* Carried over from the 2.x extension: everything is a custom property so
-   light/dark comes free. The palette variants come later; this slice only
-   needs to prove the surfaces render. */
+/* ===========================================================================
+ * DESIGN TOKENS — sourced verbatim from the legacy extension's popup.html.
+ *
+ * Taken wholesale on purpose. This layer is ~100 of that file's 955 style
+ * lines and carries ZERO DOM coupling: it is `:root`, dark mode, five
+ * palettes and five dark x palette combinations, already designed and
+ * already balanced against each other. Rewriting it would be redoing real
+ * design work badly, and "form convergence with the old extension" is
+ * precisely what these values ARE.
+ *
+ * The other ~850 lines are component rules bound to the popup's markup
+ * (.screen, .tab-btn, .tracked-card, a 320px body) and are deliberately NOT
+ * carried over — those are rewritten per component below.
+ *
+ * RULE: everything below this block must reference var(--…) and never a
+ * literal colour. That is what makes light/dark x 6 palettes free, and it
+ * is the only reason a theme switcher will be a preference rather than a
+ * project.
+ * ======================================================================= */
+
 :root {
   --bg: #ffffff;
-  --bg-soft: #f6f7f9;
+  --bg-soft: #f8fafc;
   --bg-input: #ffffff;
-  --border: #e3e6ea;
-  --border-strong: #c9cfd6;
-  --text: #16191d;
-  --text-muted: #5b6470;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --divider: #f1f5f9;
+
   --accent-50: #eef2ff;
+  --accent-100: #e0e7ff;
   --accent-500: #6366f1;
   --accent-600: #4f46e5;
+  --accent-700: #4338ca;
+  --accent-900: #312e81;
+
+  --error: #b91c1c;
+  --success: #047857;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16191d;
-    --bg-soft: #1e2228;
-    --bg-input: #1b1f24;
-    --border: #2a2f36;
-    --border-strong: #3a414a;
-    --text: #e8eaed;
-    --text-muted: #9aa4b0;
-    --accent-50: #1e1b4b;
-    --accent-500: #818cf8;
-    --accent-600: #6366f1;
-  }
+:root[data-theme='dark'] {
+  --bg: #0f172a;
+  --bg-soft: #1e293b;
+  --bg-input: #1e293b;
+  --border: #334155;
+  --border-strong: #475569;
+  --text: #ffffff;
+  --text-muted: #cbd5e1;
+  --text-faint: #94a3b8;
+  --divider: #1e293b;
+  --accent-50: #1e1b4b;
+  --accent-100: #312e81;
+  --error: #f87171;
+  --success: #34d399;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-palette='jade'] {
+  --accent-50: #ecfdf5;
+  --accent-100: #d1fae5;
+  --accent-500: #10b981;
+  --accent-600: #059669;
+  --accent-700: #047857;
+  --accent-900: #064e3b;
+}
+:root[data-palette='rose'] {
+  --accent-50: #fff1f2;
+  --accent-100: #ffe4e6;
+  --accent-500: #f43f5e;
+  --accent-600: #e11d48;
+  --accent-700: #be123c;
+  --accent-900: #881337;
+}
+:root[data-palette='amber'] {
+  --accent-50: #fffbeb;
+  --accent-100: #fef3c7;
+  --accent-500: #f59e0b;
+  --accent-600: #d97706;
+  --accent-700: #b45309;
+  --accent-900: #78350f;
+}
+:root[data-palette='violet'] {
+  --accent-50: #f5f3ff;
+  --accent-100: #ede9fe;
+  --accent-500: #8b5cf6;
+  --accent-600: #7c3aed;
+  --accent-700: #6d28d9;
+  --accent-900: #4c1d95;
+}
+:root[data-palette='blue'] {
+  --accent-50: #eff6ff;
+  --accent-100: #dbeafe;
+  --accent-500: #3b82f6;
+  --accent-600: #2563eb;
+  --accent-700: #1d4ed8;
+  --accent-900: #1e3a8a;
+}
+:root[data-theme='dark'][data-palette='jade'] {
+  --accent-50: #022c22;
+  --accent-100: #064e3b;
+}
+:root[data-theme='dark'][data-palette='rose'] {
+  --accent-50: #4c0519;
+  --accent-100: #881337;
+}
+:root[data-theme='dark'][data-palette='amber'] {
+  --accent-50: #451a03;
+  --accent-100: #78350f;
+}
+:root[data-theme='dark'][data-palette='violet'] {
+  --accent-50: #2e1065;
+  --accent-100: #4c1d95;
+}
+:root[data-theme='dark'][data-palette='blue'] {
+  --accent-50: #172554;
+  --accent-100: #1e3a8a;
 }
 
 * {
@@ -420,3 +510,20 @@ h1 {
 }
 .send__incomplete-title { margin-top: 3px; font-weight: 600; line-height: 1.35; }
 .send__incomplete-company { font-size: 12px; color: var(--text-muted); }
+
+/* Theme toggle, floated to the header's trailing edge. */
+.wb__head { position: relative; }
+.wb__theme {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.wb__theme:hover { color: var(--text); border-color: var(--border-strong); }
