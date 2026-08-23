@@ -289,6 +289,28 @@ export default class SendCard extends Component {
 
     this.scrapeId = String(resp.data?.data?.id ?? resp.data?.id ?? '') || null;
     this.kind = 'ok';
+
+    // Hand the scrape to the worker to watch.
+    //
+    // No duplication with what this card shows: the panel reports "sent", the
+    // worker reports "done". They are different facts arriving at different
+    // times, and the second one is the one you are not sitting here for —
+    // which is the entire reason the worker exists now that the panel can
+    // otherwise poll for itself.
+    //
+    // The credential deliberately does NOT ride along; the worker reads it
+    // from the same storage this panel wrote it to.
+    if (this.scrapeId) {
+      try {
+        void chrome.runtime.sendMessage({
+          type: 'cc-watch-scrape',
+          scrapeId: this.scrapeId,
+          url: payload.url,
+        });
+      } catch {
+        /* no worker (e.g. rendered outside an extension context) */
+      }
+    }
     const from = payload.frames > 1 ? ` from ${payload.frames} frames` : '';
     // Naming the path matters while the fast path is new: "browser tier" is
     // the one that can hang on an auth-walled page, and seeing it in the
