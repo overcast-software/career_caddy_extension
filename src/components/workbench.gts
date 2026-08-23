@@ -15,6 +15,7 @@ import LinkCard from './link-card.gts';
 import QuickCopyCard from './quick-copy-card.gts';
 import ApplicationCard from './application-card.gts';
 import LadderOffer from './ladder-offer.gts';
+import MatchAppCard from './match-app-card.gts';
 import AccessGate from './access-gate.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
@@ -202,6 +203,7 @@ export default class Workbench extends Component {
             what turns "no post linked" into a trackable application. }}
         <LadderOffer />
         <ApplicationCard />
+        <MatchAppCard />
       </Section>
 
       <Section @id="answers" @sections={{this.sections}}>

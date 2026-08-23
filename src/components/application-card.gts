@@ -1,9 +1,11 @@
 import Component from '@glimmer/component';
+import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
 import { FRONTEND_ORIGIN } from '../lib/api.ts';
 import { application } from '../state/application.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { ladder } from '../state/ladder.ts';
+import { page } from '../state/page.ts';
 
 /**
  * Track an application against the job post matched to this page.
@@ -19,6 +21,20 @@ import { ladder } from '../state/ladder.ts';
  * a dead control, and a dead control reads as a bug.
  */
 export default class ApplicationCard extends Component {
+  constructor(owner: Owner, args: object) {
+    super(owner, args);
+    // On open and on every navigation: if a post is known for this page, ask
+    // once whether it already has an application. Cached, so revisiting a page
+    // costs nothing.
+    void this.check();
+    page.onChange(() => void this.check());
+  }
+
+  private check(): void {
+    const id = trackedPost.post?.id;
+    if (id) void application.refreshFor(id);
+  }
+
   get app(): typeof application {
     return application;
   }
