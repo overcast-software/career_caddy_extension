@@ -1,5 +1,5 @@
 import { setApplyUrl } from '../data/posts.ts';
-import { wouldReplaceApplyUrl } from '../domain/job-post.ts';
+import { isAuthWall, wouldReplaceApplyUrl } from '../domain/job-post.ts';
 import { collectHints } from './hints.ts';
 import { page } from './page.ts';
 import { session } from './session.ts';
@@ -51,6 +51,14 @@ class ApplyBackfill {
     const hints = await collectHints(url);
     if (mine !== this.ticket) return;
     if (!hints.applyUrl) return;
+
+    // Never record a sign-in page as where an application goes. Older posts in
+    // the library carry `linkedin.com/signup/cold-join?…` for exactly this
+    // reason — something captured the wall a logged-out visitor was bounced to.
+    // This path writes without asking, so it is the one that most needs the
+    // guard; the link picker deliberately does not use it, because there a
+    // human is looking at the page.
+    if (isAuthWall(hints.applyUrl)) return;
 
     // Belt and braces. post.applyUrl was null above, so this cannot be true —
     // but it is the one predicate that stands between a silent write and

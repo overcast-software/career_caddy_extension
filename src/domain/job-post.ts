@@ -109,3 +109,65 @@ export function jobPostFromIncluded(
 export function wouldReplaceApplyUrl(post: JobPost, candidateUrl: string): boolean {
   return !!post.applyUrl && post.applyUrl !== candidateUrl;
 }
+
+/**
+ * Auth-wall path words. Matched against `-`/`_`-split path segments, so
+ * `/checkpoint/lg/login-submit` is caught by `login`.
+ */
+const AUTH_WORDS = new Set([
+  'login',
+  'signin',
+  'logon',
+  'signup',
+  'register',
+  'registration',
+  'authwall',
+  'checkpoint',
+  'authenticate',
+  'unauthorized',
+]);
+
+/** Hosts that only ever serve a sign-in, whatever the path says. */
+const AUTH_HOSTS = ['accounts.google.com', 'login.microsoftonline.com', 'auth0.com'];
+
+/**
+ * Is this URL a login/signup wall rather than somewhere an application goes?
+ *
+ * REAL DAMAGE, NOT A HYPOTHETICAL: older posts in the library carry
+ * `linkedin.com/signup/cold-join?…` as their `apply_url` — a captured signup
+ * redirect. LinkedIn bounces a logged-out visitor to a wall, something recorded
+ * the wall, and the post now claims that is where you apply.
+ *
+ * THE ASYMMETRY IS WHY THIS LEANS TOWARD REJECTING. A false positive means the
+ * field stays empty — exactly where it already was, and the link picker can
+ * still set it by hand. A false negative writes a wall into a field that feeds
+ * dedupe and is the only durable record of where an application went. Those
+ * costs are nowhere near equal, so an over-eager guard is the right kind of
+ * wrong. `signup-inc` in a path would trip this; that is an acceptable trade.
+ *
+ * Deliberately NOT applied to the link picker. There a human is looking at the
+ * page and choosing the link, and overriding that would be the tool telling
+ * someone they cannot see what is in front of them. This guards the SILENT
+ * path, where nobody is watching.
+ */
+export function isAuthWall(url: string | null | undefined): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url ?? '');
+  } catch {
+    // Unparseable is not a wall, but it is not a usable apply URL either. The
+    // callers reject it on their own terms; this predicate answers only the
+    // question it is named for.
+    return false;
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  if (AUTH_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return true;
+
+  return parsed.pathname
+    .toLowerCase()
+    .split('/')
+    .filter(Boolean)
+    .flatMap((segment) => segment.split(/[-_]/))
+    .some((token) => AUTH_WORDS.has(token));
+}
