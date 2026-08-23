@@ -30,8 +30,37 @@ Every divergence gets a verdict:
 ## Status
 
 Client half: **complete** — grepped from `src/`, not recalled.
-Server half: **in progress** — three Explore agents are tracing the views,
-the ingestion pipeline, and the other consumers.
+Server half: **the ingestion trace has landed and is verified below.** The
+endpoint-by-endpoint and blast-radius passes are still running.
+
+---
+
+## ⛔ THE HEADLINE — the fast path is a much thinner pipeline than assumed
+
+CC-176 made **extension-direct the only route for any page with text**. That
+route has a synchronous "Tier 0" branch that fires whenever `structured_prefill`
+yields a title and a company — and on that branch the server does far less than
+the browser tier. Verified by reading `views/scrapes.py:639-790`, not inferred:
+
+| The extension sends / expects | On the Tier-0 fast path |
+|---|---|
+| `captured_payload.apply_url` | **NEVER READ.** `_parsed_job_data_from_payload` reads exactly four keys — title, company, description, location (`scrapes.py:680-689`). The only occurrence of `apply_url` in the whole 150-line consume path is inside a *docstring* at `:719`. |
+| closed-posting detection | **DEAD.** `create_kwargs` (`:573-586`) never sets `job_content`, so `raw_source` is `""` in `process_evaluation` and BOTH legacy detection channels are guarded off (`job_post_extractor.py:726`, `:746`). |
+| completeness review | **NEVER RUNS.** `_consume_extension_direct_payload` calls `process_evaluation` directly (`:764`); the reviewer's only two call sites are `parse_scrape` and `persist_extraction`. |
+| `html` for selector discovery | **Never persisted** — breaks `inspect_scrape_html` and `find_selectors_for_text`. |
+| tier ladder, JSON-LD, screenshots, `ResolveApplyUrl`, `UpdateProfile` learning | **None of it.** Extension-direct scrapes never reach `status='hold'`, so `claim_next` never claims them and the graph never sees them. |
+| `scraped_at` | Null — the completion writes `save(update_fields=["status"])` (`:769`), bypassing the stamp in `pre_save_payload`. |
+
+**This is the answer to "why do only 3 of 100 posts have an `apply_url`."**
+There are five writers of that column and the fast path is none of them. The
+route that DOES honour `apply_url` is `from-text` — which CC-176 made
+unreachable for any page with text. The remaining few are almost certainly the
+link picker, which is user-driven.
+
+**Neither unmerged PR (api #250, agents #63) touches this path.** #250's
+refusal validator never fires on Tier 0 because that branch already gates on
+`title and company` before constructing `ParsedJobData`. #63 is browser-tier
+only. The highest-volume route gains nothing from either.
 
 ---
 
@@ -105,12 +134,24 @@ apply_url, canonical_link_hint, referrer_url, structured_prefill
 > `injected/grab-hints.ts` returns `closedEvidence` verbatim and `SendCard`
 > displays it. It is in **neither** request body.
 >
-> **Verdict: probably CORRECT, needs confirming.** The server runs
-> `detect_posting_status()` on `scrape.job_content` — the same text the
-> extension sends — so it reaches its own verdict without trusting a client
-> claim. If so this is UNDOCUMENTED, and the client-side detection is a local
-> preview. Note the phrase lists are duplicated (`data/selectors.ts`
-> `CLOSED_PHRASES` vs `text_signals._CLOSED_PHRASES`) and can drift.
+> **Verdict: API GAP. I previously called this correct and I was wrong.**
+>
+> I reasoned that the server detects closed state independently from
+> `scrape.job_content` — the same text the extension sends — so there was
+> nothing to wire. That holds for `from-text`. It is **false for
+> extension-direct**, which is the only path a page with text takes.
+>
+> `create_kwargs` never sets `job_content` on that route (`scrapes.py:573-586`),
+> so `raw_source` is empty in `process_evaluation` and both detection channels
+> are guarded off (`job_post_extractor.py:726`, `:746`). `detected_posting_status`
+> is also null, because only the graph writes it.
+>
+> **So closed-posting detection has been dead on the extension's real path
+> since CC-176.** The panel shows the user "No longer accepting applications";
+> the server records nothing. Fixing it means either sending the evidence, or
+> having the server persist `job_content` on this route — the latter is
+> probably right, since it also revives the description fallback at
+> `job_post_extractor.py:666-672`.
 
 ### Lookup and search
 
