@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import DraftBox from './draft-box.gts';
 import PermissionProbe from './permission-probe.gts';
+import ErrorLog from './error-log.gts';
 import SectionSet from './section-set.gts';
 import Segmented from './segmented.gts';
 import Section from './section.gts';
@@ -212,6 +213,7 @@ export default class Workbench extends Component {
         <p class="wb__uptime">
           Panel alive for <strong>{{this.uptimeLabel}}</strong>
         </p>
+        <ErrorLog />
         <PermissionProbe />
       </Section>
   </template>

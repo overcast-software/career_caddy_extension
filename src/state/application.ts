@@ -2,6 +2,7 @@ import { tracked } from '@glimmer/tracking';
 import { createApplication, findExistingApplication } from '../data/applications.ts';
 import { page } from './page.ts';
 import { session } from './session.ts';
+import { errorLog } from './errors.ts';
 import { trackedPost } from './tracked.ts';
 
 /**
@@ -65,6 +66,7 @@ class ApplicationState {
       // easily see or undo from this panel.
       this.state = 'error';
       this.status = existing.error;
+      errorLog.record('track', existing.error, page.host);
       return;
     }
 
@@ -89,6 +91,7 @@ class ApplicationState {
     if (!created.ok) {
       this.state = 'error';
       this.status = created.error;
+      errorLog.record('track', created.error, page.host);
       return;
     }
 

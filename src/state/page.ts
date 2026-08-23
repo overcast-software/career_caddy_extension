@@ -88,6 +88,20 @@ class PageState {
       return;
     }
     if (mine !== this.ticket) return; // superseded while we awaited
+
+    // What subscribers are told is "the PAGE CHANGED", so only say it when it
+    // did. refresh() runs on focus changes too — including the focus change
+    // from clicking into the side panel itself — and firing then made
+    // "navigate away" handlers run while the user was standing still.
+    //
+    // The symptom was precise and awful: press Send, the status flashes and
+    // vanishes, nothing happens. Clicking the button moved focus, focus
+    // triggered refresh, refresh told SendCard the page had changed, SendCard
+    // cleared its status and bumped its staleness ticket, and the send it had
+    // just started aborted itself as belonging to a previous page. A guard
+    // against stale results was silently cancelling live ones.
+    const previousUrl = this.url;
+
     this.tabId = tab?.id;
     this.url = tab?.url ?? '';
     this.title = tab?.title ?? '';
@@ -96,6 +110,11 @@ class PageState {
     } catch {
       this.isCareerCaddy = false;
     }
+    // Same URL means the same page, however we got here. Tracked properties
+    // above are still updated every time — title can change under a stable
+    // URL — but a NOTIFICATION means navigation, and nothing else.
+    if (this.url === previousUrl) return;
+
     for (const fn of this.subscribers) {
       try {
         fn();

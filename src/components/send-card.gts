@@ -5,6 +5,7 @@ import { on } from '@ember/modifier';
 import { request, FRONTEND_ORIGIN } from '../lib/api.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
+import { errorLog } from '../state/errors.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { planSend } from '../domain/send-gate.ts';
@@ -188,14 +189,23 @@ export default class SendCard extends Component {
     this.closedEvidence = null;
   }
 
+  /**
+   * Fail loudly in two places at once: inline, where the user is looking, and
+   * in the log, where they can still read it a minute later. Every error path
+   * goes through here so none can silently record only half.
+   */
+  private fail(message: string): void {
+    this.fail(message);
+    errorLog.record('send', message, page.host);
+  }
+
   private async doSend(): Promise<void> {
     const mine = ++this.ticket;
     /** True once the tab has moved on; every write below checks it. */
     const stale = (): boolean => mine !== this.ticket;
 
     if (!session.apiKey) {
-      this.kind = 'error';
-      this.status = 'Connect to Career Caddy first.';
+      this.fail('Connect to Career Caddy first.');
       return;
     }
 
@@ -212,22 +222,21 @@ export default class SendCard extends Component {
       await access.refresh();
       if (stale()) return;
       if (access.needsGrant) {
-        this.kind = 'error';
-        this.status = `Enable Career Caddy on ${access.host} first — the button is just above.`;
+        this.fail(`Enable Career Caddy on ${access.host} first — the button is just above.`);
         return;
       }
       const blocked = await page.countBlockedFrames();
       if (stale()) return;
-      this.kind = 'error';
-      this.status = blocked
-        ? `Could not read this tab. ${blocked} embedded frame(s) are cross-origin, so the posting may live somewhere the extension cannot reach.`
-        : 'Could not read this tab. Reload the page and try again.';
+      this.fail(
+        blocked
+          ? `Could not read this tab. ${blocked} embedded frame(s) are cross-origin, so the posting may live somewhere the extension cannot reach.`
+          : 'Could not read this tab. Reload the page and try again.',
+      );
       return;
     }
 
     if (!payload.text.trim()) {
-      this.kind = 'error';
-      this.status = 'This page has no readable text to send.';
+      this.fail('This page has no readable text to send.');
       return;
     }
 
@@ -241,12 +250,12 @@ export default class SendCard extends Component {
     if (chars < MIN_USEFUL_CHARS) {
       const blocked = await page.countBlockedFrames();
       if (stale()) return;
-      this.kind = 'error';
-      this.status =
+      this.fail(
         `Only ${chars} characters readable here` +
         (blocked
           ? `, and ${blocked} frame(s) are cross-origin — the posting is probably inside one the extension can't reach.`
-          : ` — that's too little to be the job posting. Try the posting's own page rather than a listing or search result.`);
+          : ` — that's too little to be the job posting. Try the posting's own page rather than a listing or search result.`),
+      );
       return;
     }
 
@@ -282,8 +291,7 @@ export default class SendCard extends Component {
     if (stale()) return;
 
     if (!resp.ok) {
-      this.kind = 'error';
-      this.status = resp.error;
+      this.fail(resp.error);
       return;
     }
 

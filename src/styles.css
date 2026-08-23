@@ -815,3 +815,43 @@ h1 {
 .ac__status { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
 .ac__status.is-err { color: var(--error); }
 .ac__empty { margin: 12px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+/* --- error log ---------------------------------------------------------- */
+.elog { margin-bottom: 12px; }
+.elog__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.elog__clear {
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-500);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.elog__empty { margin: 0; font-size: 11px; color: var(--text-muted); }
+.elog__list { margin: 0; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
+.elog__row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 7px;
+  border-left: 2px solid var(--error);
+  background: var(--bg-soft);
+  border-radius: 0 4px 4px 0;
+}
+.elog__row + .elog__row { margin-top: 4px; }
+.elog__meta { font-size: 9px; color: var(--text-muted); }
+/* Wrap, never truncate: the tail of a message is usually the useful half. */
+.elog__msg { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }

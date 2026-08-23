@@ -5,6 +5,7 @@ import type { JobPost } from '../domain/job-post.ts';
 import { classifyUrl } from '../domain/url-policy.ts';
 import { page } from './page.ts';
 import { session } from './session.ts';
+import { errorLog } from './errors.ts';
 import { trackedPost } from './tracked.ts';
 
 /**
@@ -116,6 +117,7 @@ class LinkPickerState {
       this.state = 'error';
       this.status = "Couldn't load your posts — try again.";
       this.statusIsError = true;
+      errorLog.record('link', this.status, page.host);
       return;
     }
 
@@ -178,6 +180,7 @@ class LinkPickerState {
       // did not happen, and saying so is the whole point.
       this.status = "Couldn't save the apply link — nothing was linked.";
       this.statusIsError = true;
+      errorLog.record('link', this.status, page.host);
       return;
     }
 
