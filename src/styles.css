@@ -545,3 +545,17 @@ h1 {
   border-color: var(--accent-500);
 }
 .wb__prefs { margin-top: 10px; }
+
+/* Icons inherit their button's colour via stroke="currentColor", so they
+   theme themselves across light/dark x six palettes with no second asset. */
+.icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.seg__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}

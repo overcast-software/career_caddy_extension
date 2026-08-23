@@ -34,8 +34,8 @@ export default class SectionSet extends Component<SectionSetSignature> {
   }
 
   layoutOptions = [
-    { value: 'accordion', label: 'Accordion' },
-    { value: 'tabs', label: 'Tabs' },
+    { value: 'accordion', label: 'Accordion', icon: 'rows' as const },
+    { value: 'tabs', label: 'Tabs', icon: 'columns' as const },
   ];
 
   isActive = (id: string): boolean => layout.activeId === id;

@@ -1,10 +1,14 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import Icon from './icon.gts';
+import type { IconName } from './icon.gts';
 
 export interface SegmentedOption {
   value: string;
   label: string;
+  /** Optional. Rendered before the label; inherits the button's colour. */
+  icon?: IconName;
 }
 
 export interface SegmentedSignature {
@@ -41,7 +45,10 @@ export default class Segmented extends Component<SegmentedSignature> {
           class="seg__btn {{if (this.isActive option.value) 'is-on'}}"
           aria-pressed="{{if (this.isActive option.value) 'true' 'false'}}"
           {{on "click" (fn @onSelect option.value)}}
-        >{{option.label}}</button>
+        >
+          {{#if option.icon}}<Icon @name={{option.icon}} />{{/if}}
+          <span class="seg__label">{{option.label}}</span>
+        </button>
       {{/each}}
     </div>
   </template>

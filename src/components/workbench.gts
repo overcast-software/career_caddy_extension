@@ -96,9 +96,9 @@ export default class Workbench extends Component {
   }
 
   themeOptions = [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'System' },
+    { value: 'light', label: 'Light', icon: 'sun' as const },
+    { value: 'dark', label: 'Dark', icon: 'moon' as const },
+    { value: 'system', label: 'System', icon: 'monitor' as const },
   ];
 
   setTheme = (mode: string): void => theme.setMode(mode);
