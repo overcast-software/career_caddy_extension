@@ -12,6 +12,7 @@ import SendCard from './send-card.gts';
 import TrackedCard from './tracked-card.gts';
 import LinkCard from './link-card.gts';
 import QuickCopyCard from './quick-copy-card.gts';
+import ApplicationCard from './application-card.gts';
 import AccessGate from './access-gate.gts';
 import type { SectionSpec } from './section.gts';
 import { layout } from '../state/layout.ts';
@@ -189,7 +190,10 @@ export default class Workbench extends Component {
       </Section>
 
       <Section @id="applications" @sections={{this.sections}}>
+        {{! Quick copy first and unconditional: it is useful on every page,
+            including the application form itself, where no post is matched. }}
         <QuickCopyCard />
+        <ApplicationCard />
       </Section>
 
       <Section @id="answers" @sections={{this.sections}}>
