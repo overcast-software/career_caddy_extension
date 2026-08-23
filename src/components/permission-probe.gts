@@ -31,6 +31,11 @@ export default class PermissionProbe extends Component {
   constructor(owner: unknown, args: object) {
     super(owner, args);
     void this.dump();
+    // A snapshot dump silently goes stale the moment you switch tabs, and a
+    // stale dump is worse than none — it once showed `chrome://extensions`
+    // while the panel sat beside a LinkedIn posting, which reads as a bug in
+    // tab detection rather than as an old reading.
+    page.onChange(() => void this.collect());
   }
 
   dump = (): void => {
@@ -58,30 +63,6 @@ export default class PermissionProbe extends Component {
       });
     } catch (error) {
       out.push({ label: 'tabs.query', value: describe(error), ok: false });
-    }
-
-    // 2. Did the worker's action.onClicked fire, and what did IT see? The docs
-    //    say activeTab temporarily grants the tabs permission, so tab.url
-    //    should be populated there even when it is not here.
-    try {
-      const saved = await chrome.storage.session.get(['ccLastActionTab']);
-      const entry = saved['ccLastActionTab'] as
-        | { tabId?: number; url?: string; at?: number }
-        | undefined;
-      out.push({
-        label: 'worker stash',
-        value: entry ? JSON.stringify(entry) : 'ABSENT  (onClicked never fired?)',
-        ok: !!entry?.url,
-      });
-      if (entry && entry.tabId !== tabId) {
-        out.push({
-          label: 'stash tab match',
-          value: `stash=${entry.tabId} current=${tabId}  MISMATCH`,
-          ok: false,
-        });
-      }
-    } catch (error) {
-      out.push({ label: 'storage.session', value: describe(error), ok: false });
     }
 
     // 3. What do we actually hold? Settles "did the grant land" definitively.
