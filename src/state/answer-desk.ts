@@ -82,6 +82,9 @@ const PERSIST_DEBOUNCE_MS = 400;
 
 export type ScanState = 'idle' | 'scanning' | 'done' | 'blocked';
 
+/** What `pushInstruction` did, so the caller can say it. */
+export type PushOutcome = 'added' | 'already-there' | 'no-question' | 'empty';
+
 class AnswerDesk {
   /** Questions found on the page, in document order. Choice controls included. */
   @tracked fields: PageQuestion[] = [];
@@ -359,6 +362,53 @@ class AnswerDesk {
       ...draft,
       instructions: removeInstruction(draft.instructions, index),
     }));
+  }
+
+  /**
+   * Put a saved snippet on the SELECTED question's instruction stack (CCEXT-86).
+   *
+   * The entry point for quick copy, and the reason it takes no key: the caller
+   * is a card in a different section that has no business naming a question.
+   * It hands over text; the desk decides where text goes, which is the same
+   * reason `<AnswerEditor>` never learns which question it is editing.
+   *
+   * It writes through `mutate` rather than touching `drafts`, so it inherits
+   * every property that path already guarantees — the draft is created if the
+   * question has never been touched, `at` is stamped, the map is REPLACED so
+   * autotracking fires, and the persist is scheduled. A direct write would look
+   * identical and re-render nothing.
+   *
+   * Returns what actually happened instead of void. The press happens in a
+   * card that may be in a collapsed section, so the chip appearing is not
+   * visible confirmation from where the user clicked — the caller has to be
+   * able to say which of these four things it did.
+   */
+  pushInstruction(text: string): PushOutcome {
+    const trimmed = text.trim();
+    if (!trimmed) return 'empty';
+
+    const key = this.selectedKey;
+    if (!key) return 'no-question';
+    // A selected key can outlive the question it names — a re-render drops the
+    // field and the picker has not been re-run yet. Resolving through
+    // `entries` is what makes the reason honest rather than reporting a
+    // successful add that `mutate` quietly declined to perform.
+    if (!this.entries.some((e) => e.key === key)) return 'no-question';
+
+    // Asked BEFORE the write, because `addInstruction` drops a duplicate
+    // silently and the two outcomes are indistinguishable afterwards. Saying
+    // "already in force" is the difference between a dead button and a button
+    // telling you the work is done.
+    const alreadyThere = (this.drafts[key]?.instructions ?? []).some(
+      (i) => i.toLowerCase() === trimmed.toLowerCase(),
+    );
+
+    this.mutate(key, (draft) => ({
+      ...draft,
+      instructions: addInstruction(draft.instructions, trimmed),
+    }));
+
+    return alreadyThere ? 'already-there' : 'added';
   }
 
   // ── generating ───────────────────────────────────────────────────────────

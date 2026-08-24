@@ -716,6 +716,14 @@ h1 {
 .qc__action { flex: 0 0 auto; display: flex; align-items: center; color: var(--text-muted); }
 .qc__action .icon { width: 14px; height: 14px; }
 .qc__failed { font-size: 10px; color: var(--error); }
+/* CCEXT-86: a prose snippet goes to the answer desk, not the clipboard, so the
+   row says where. Accent rather than muted because it is the destination that
+   differs from every other row, and that is the part worth reading. */
+.qc__to { font-size: 10px; font-weight: 600; white-space: nowrap; color: var(--accent-500); }
+
+/* What the last press did. The desk is in another section, so this line is the
+   only confirmation visible from where the click happened. */
+.qc__note { margin: 6px 0 0; font-size: 11px; color: var(--text-muted); }
 
 .qc__open {
   flex: 0 0 auto;
@@ -776,6 +784,10 @@ h1 {
 .qc__chip .icon { width: 15px; height: 15px; }
 .qc__chip.is-copied { border-color: var(--success); color: var(--success); }
 .qc__chip.is-failed { border-color: var(--error); color: var(--error); }
+/* Landed on the desk. A distinct colour from is-copied on purpose: two
+   different things happen on this bar now, and a shared green would erase the
+   one distinction the user needs — which of them went where. */
+.qc__chip.is-added { border-color: var(--accent-500); color: var(--accent-500); }
 
 /* --- application card --------------------------------------------------- */
 .ac {
