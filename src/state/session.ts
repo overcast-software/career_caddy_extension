@@ -74,6 +74,37 @@ class SessionState {
   @tracked me: Me | null = null;
   @tracked message = '';
 
+  private subscribers: (() => void)[] = [];
+
+  /**
+   * Notify on every settled change to whether we hold a key (CCEXT-92).
+   *
+   * Deliberately the same shape as `page.onChange`, because it is the same
+   * problem: something the panel derives answers from has changed, and the
+   * answers must be re-derived. A second, different mechanism for that would
+   * be one more thing to remember to wire up.
+   *
+   * The bug this exists for: `trackedPost.refresh()` bails on `!session.apiKey`
+   * before it ever asks the server, so logged out it settles on `idle`. Its
+   * only triggers were panel boot, a page change and a completed score — so
+   * connecting left that `idle` frozen until the user navigated. Doug hit it
+   * on a fresh install: *"I log in. I expect that it can now determine that
+   * it's in the system, it didn't."*
+   *
+   * Fired on connect, on disconnect, and at the end of `load()`. `load()`
+   * matters as much as `connect()` — the workbench kicks `session.load()` and
+   * `trackedPost.refresh()` off in the same constructor without awaiting
+   * either, so on a boot with a stored key the lookup can and does lose the
+   * race. Notifying here makes the boot order irrelevant instead of lucky.
+   */
+  onChange(fn: () => void): void {
+    this.subscribers.push(fn);
+  }
+
+  private notify(): void {
+    for (const fn of this.subscribers) fn();
+  }
+
   get isConnected(): boolean {
     return this.state === 'connected' && !!this.apiKey;
   }
@@ -90,6 +121,9 @@ class SessionState {
       this.state = 'disconnected';
     }
     if (this.isConnected && !this.me) void this.refreshMe();
+    // AFTER the state is settled, so a subscriber reading `apiKey` sees the
+    // restored key rather than the null it started as.
+    this.notify();
   }
 
   /**
@@ -161,6 +195,9 @@ class SessionState {
     this.message = '';
     await safeSet({ [KEYS.apiKey]: key, [KEYS.keyId]: id });
     await this.refreshMe();
+    // The moment this ticket is about: the panel now has a key, and everything
+    // that declined to ask a question without one should ask it.
+    this.notify();
   }
 
   async refreshMe(): Promise<void> {
@@ -204,6 +241,11 @@ class SessionState {
     } catch {
       /* nothing to clear outside an extension context */
     }
+    // Disconnect notifies for the same reason connect does, in reverse: a
+    // tracked card left on screen after the key is gone is showing the
+    // previous account's library. `refresh()` bails on the missing key and
+    // clears it.
+    this.notify();
   }
 
   /** Open the SPA's login page so the SSO read has something to find. */

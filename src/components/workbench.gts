@@ -89,6 +89,18 @@ export default class Workbench extends Component {
     page.start();
     // Re-evaluate access on every page change — a grant is per-origin, so
     // switching tabs can move between granted and ungranted sites.
+    // CCEXT-92: connecting re-asks everything a page change would.
+    // `trackedPost.refresh()` declines to call the server without a key, so
+    // before this the answer it settled on while logged out stayed frozen
+    // until the tab navigated — log in, and the panel still offered to send a
+    // page it already had.
+    //
+    // Registered on the SAME callback as navigation because the question is
+    // identical: something the answers derive from moved. Note this covers
+    // `session.load()` too, so a boot that restores a stored key no longer
+    // depends on winning a race against the constructor's own refresh.
+    session.onChange(() => this.reevaluate());
+
     page.onChange(() => {
       void access.refresh();
       // "Do we already know this page?" is asked on every navigation, not
@@ -109,11 +121,29 @@ export default class Workbench extends Component {
       linkPicker.disarm();
     });
     access.listen();
+    // Kept even though `session.onChange` and `page.onChange` both cover the
+    // usual boot: on a restricted page `page.refresh()` finds no URL, so
+    // `url === previousUrl === ''` and it returns WITHOUT notifying. Drop this
+    // and the access probe never runs there.
+    this.reevaluate();
+  }
+
+  /**
+   * Re-ask everything that depends on the key or the page.
+   *
+   * One method, three callers (boot, navigation, connect/disconnect), so the
+   * set cannot drift between them — which is exactly how connect ended up
+   * re-running nothing.
+   */
+  private reevaluate(): void {
     void access.refresh();
     void trackedPost.refresh().then(() => {
-        void ladder.run();
-        void applyBackfill.maybeBackfill();
-      });
+      void ladder.run();
+      void applyBackfill.maybeBackfill();
+    });
+    // Quick copy is key-gated too, and its card renders nothing when `/me`
+    // has no snippets — indistinguishable from "you have none" (CCEXT-86).
+    void me.load();
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */

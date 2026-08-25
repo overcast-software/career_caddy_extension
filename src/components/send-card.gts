@@ -114,6 +114,12 @@ export default class SendCard extends Component {
   }
 
   get heading(): string {
+    // Disconnected, the library was never consulted — `trackedPost.refresh()`
+    // returns before it asks. "Send this page to Career Caddy" is an OFFER,
+    // and an offer implies a check happened. Doug, 2026-08-25: *"the verbage
+    // suggested it didn't know"* — it did not know, and it had not looked.
+    // Say the second thing (CCEXT-92).
+    if (!this.session.isConnected) return 'Connect to check your library';
     return this.isResend ? 'Complete this post' : 'Send this page to Career Caddy';
   }
 
