@@ -560,6 +560,24 @@ h1 {
   border-color: var(--accent-500);
 }
 .wb__prefs { margin-top: 10px; }
+.wb__head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* CCEXT-87: icon-only, sized to content rather than stretched across the
+   panel. Theme is a set-once preference and was taking a full-width row on
+   every tab; three glyphs say the same thing in a corner. */
+.seg--compact { display: inline-flex; margin-bottom: 0; }
+.seg--compact .seg__btn { flex: 0 0 auto; padding: 4px 7px; gap: 0; }
+/* Hidden from the eye, not from the accessibility tree — the button keeps its
+   accessible name and gains a hover title. `clip-path` over `display:none`
+   for exactly that reason. */
+.seg--compact .seg__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
 
 /* Icons inherit their button's colour via stroke="currentColor", so they
    theme themselves across light/dark x six palettes with no second asset. */

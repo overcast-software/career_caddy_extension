@@ -18,8 +18,10 @@ import ApplicationCard from './application-card.gts';
 import LadderOffer from './ladder-offer.gts';
 import MatchAppCard from './match-app-card.gts';
 import AccessGate from './access-gate.gts';
-import type { SectionSpec } from './section.gts';
+import { visibleSections } from '../domain/sections.ts';
+import type { SectionSpec } from '../domain/sections.ts';
 import { layout } from '../state/layout.ts';
+import type { LayoutMode } from '../state/layout.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
@@ -141,6 +143,31 @@ export default class Workbench extends Component {
 
   setTheme = (mode: string): void => theme.setMode(mode);
 
+  /**
+   * The layout A/B, now living in Diagnostics (CCEXT-87).
+   *
+   * It is not a preference — `state/layout.ts` says so: *"Rather than guess,
+   * this makes the choice a runtime toggle over the same components."* It is
+   * the instrument for deciding accordion-vs-tabs, which is CCEXT-80's job,
+   * and it was charging every tab a full-width row to stay reachable.
+   *
+   * NOTE the consequence, because it is a real one: Diagnostics is staff-only,
+   * so a non-staff user can no longer change layout and is pinned to the
+   * accordion default. That is acceptable ONLY because there is no installed
+   * base yet (CCEXT-49). It makes CCEXT-80 load-bearing rather than cosmetic —
+   * whichever layout wins there becomes everyone's, permanently.
+   */
+  layoutOptions = [
+    { value: 'accordion', label: 'Accordion', icon: 'rows' as const },
+    { value: 'tabs', label: 'Tabs', icon: 'columns' as const },
+  ];
+
+  setLayout = (mode: string): void => layout.setMode(mode as LayoutMode);
+
+  get layout(): typeof layout {
+    return layout;
+  }
+
   private get manifestVersion(): string {
     try {
       return chrome.runtime.getManifest().version;
@@ -173,16 +200,31 @@ export default class Workbench extends Component {
    * without anything explicitly telling it to.
    */
   get sections(): SectionSpec[] {
-    return [
-      { id: 'page', title: 'This page', summary: this.host },
-      {
-        id: 'applications',
-        title: 'Applications',
-        summary: `${me.items.length} snippets`,
-      },
-      { id: 'answers', title: 'Answer desk', summary: this.answerSummary },
-      { id: 'diagnostics', title: 'Diagnostics', summary: `up ${this.uptimeLabel}` },
-    ];
+    return visibleSections(
+      [
+        { id: 'page', title: 'This page', short: 'Page', summary: this.host },
+        {
+          id: 'applications',
+          title: 'Applications',
+          short: 'Apply',
+          summary: `${me.items.length} snippets`,
+        },
+        {
+          id: 'answers',
+          title: 'Answer desk',
+          short: 'Answers',
+          summary: this.answerSummary,
+        },
+        {
+          id: 'diagnostics',
+          title: 'Diagnostics',
+          short: 'Debug',
+          summary: `up ${this.uptimeLabel}`,
+          staffOnly: true,
+        },
+      ],
+      me.isStaff,
+    );
   }
 
   /**
@@ -202,21 +244,24 @@ export default class Workbench extends Component {
   }
 
   <template>
+    {{! CCEXT-87: theme rides in the header rather than owning a row under it.
+        Three glyphs, sized to content — the labels are still in the DOM for
+        screen readers, hidden only from the eye. }}
     <header class="wb__head">
-      <h1 class="wb__title">Career Caddy</h1>
+      <div class="wb__head-row">
+        <h1 class="wb__title">Career Caddy</h1>
+        <Segmented
+          @label="Theme"
+          @options={{this.themeOptions}}
+          @value={{this.theme.mode}}
+          @onSelect={{this.setTheme}}
+          @compact={{true}}
+        />
+      </div>
       <p class="wb__sub">Glimmer · side panel · <code class="wb__build">{{this.build}}</code></p>
     </header>
 
     <ConnectCard />
-
-    <div class="wb__prefs">
-      <Segmented
-        @label="Theme"
-        @options={{this.themeOptions}}
-        @value={{this.theme.mode}}
-        @onSelect={{this.setTheme}}
-      />
-    </div>
 
     <SectionSet @sections={{this.sections}} />
 
@@ -247,6 +292,14 @@ export default class Workbench extends Component {
       </Section>
 
       <Section @id="diagnostics" @sections={{this.sections}}>
+        <div class="wb__prefs">
+          <Segmented
+            @label="Layout"
+            @options={{this.layoutOptions}}
+            @value={{this.layout.mode}}
+            @onSelect={{this.setLayout}}
+          />
+        </div>
         <p class="wb__uptime">
           Panel alive for <strong>{{this.uptimeLabel}}</strong>
         </p>

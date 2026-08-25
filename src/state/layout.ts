@@ -169,9 +169,12 @@ class LayoutState {
     this.openIds = next;
   }
 
-  isVisible(id: string): boolean {
-    return this.mode === 'tabs' ? this.activeId === id : this.openIds.has(id);
-  }
+  // NOTE: there is deliberately no `isVisible(id)` here any more (CCEXT-88).
+  // It answered from `activeId` alone, and this class has no idea which
+  // sections are rendered — so once Diagnostics became staff-only it would
+  // have kept naming a hidden tab as the active one. The section-aware answer
+  // is domain/sections.ts:resolveActiveId, and having exactly one of them is
+  // the point: two visibility answers is how a panel renders nothing.
 }
 
 /**

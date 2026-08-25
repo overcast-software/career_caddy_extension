@@ -21,6 +21,16 @@ export interface SegmentedSignature {
     onSelect: (value: string) => void;
     /** Announced to screen readers; the control has no visible heading. */
     label: string;
+    /**
+     * Icon-only, sized to its content instead of stretching (CCEXT-87).
+     *
+     * The text label is still RENDERED — visually hidden by CSS, not removed —
+     * so the accessible name is unchanged and a `title` carries it on hover.
+     * Swapping it for an `aria-label` would have been the same pixels and a
+     * worse tree, and it is the kind of substitution that quietly drops the
+     * name when someone later edits one of the two places.
+     */
+    compact?: boolean;
   };
   Element: HTMLDivElement;
 }
@@ -38,12 +48,18 @@ export default class Segmented extends Component<SegmentedSignature> {
   isActive = (value: string): boolean => this.args.value === value;
 
   <template>
-    <div class="seg" role="group" aria-label={{@label}} ...attributes>
+    <div
+      class="seg {{if @compact 'seg--compact'}}"
+      role="group"
+      aria-label={{@label}}
+      ...attributes
+    >
       {{#each @options key="value" as |option|}}
         <button
           type="button"
           class="seg__btn {{if (this.isActive option.value) 'is-on'}}"
           aria-pressed="{{if (this.isActive option.value) 'true' 'false'}}"
+          title={{option.label}}
           {{on "click" (fn @onSelect option.value)}}
         >
           {{#if option.icon}}<Icon @name={{option.icon}} />{{/if}}

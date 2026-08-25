@@ -1,14 +1,17 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { resolveActiveId } from '../domain/sections.ts';
 import { layout } from '../state/layout.ts';
 
-/** One section's identity. Bodies arrive as blocks, not as data. */
-export interface SectionSpec {
-  id: string;
-  title: string;
-  /** One line shown while collapsed, so a shut section still tells you something. */
-  summary?: string;
-}
+/**
+ * One section's identity. Bodies arrive as blocks, not as data.
+ *
+ * The SHAPE lives in domain/sections.ts and is re-exported here, because the
+ * rules that read it — the staff filter and the active-tab fallback — have to
+ * be testable, and vitest only runs `src/domain/`.
+ */
+export type { SectionSpec } from '../domain/sections.ts';
+import type { SectionSpec } from '../domain/sections.ts';
 
 export interface SectionSignature {
   Args: {
@@ -50,8 +53,18 @@ export default class Section extends Component<SectionSignature> {
     return layout.mode === 'accordion';
   }
 
+  /**
+   * In tabs mode this asks the SHARED resolver rather than `layout` directly.
+   * `layout` does not know which sections are on screen, so it would happily
+   * report that a hidden persisted tab is the active one — and then every
+   * visible section would correctly answer "not me" and the panel would render
+   * empty. See domain/sections.ts:resolveActiveId.
+   */
   get isOpen(): boolean {
-    return layout.isVisible(this.args.id);
+    if (layout.mode === 'tabs') {
+      return resolveActiveId(this.args.sections, layout.activeId) === this.args.id;
+    }
+    return layout.openIds.has(this.args.id);
   }
 
   toggle = (): void => layout.toggle(this.args.id);
