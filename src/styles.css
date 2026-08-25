@@ -822,12 +822,16 @@ h1 {
   gap: 8px;
   margin-bottom: 6px;
 }
+/* CCEXT-89: identical to .tp__badge. Both name the same fact — this posting
+   is in the library — so both look the same. The accent-purple variant this
+   replaced made one post look like two different relationships depending on
+   which tab you were standing on. */
 .ac__badge {
   padding: 1px 6px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--accent-500);
-  border: 1px solid var(--accent-500);
+  color: var(--success);
+  border: 1px solid var(--success);
   border-radius: 3px;
 }
 .ac__score { font-size: 13px; font-weight: 700; color: var(--accent-500); }
@@ -857,7 +861,17 @@ h1 {
   cursor: pointer;
 }
 .ac__btn:hover { border-color: var(--accent-500); color: var(--accent-500); }
-.ac__status { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
+/* A status, marked as one — it sits between two links and used to read as a
+   disabled third (CCEXT-89). The check earns it a shape of its own. */
+.ac__status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ac__status .icon { width: 12px; height: 12px; color: var(--success); }
 .ac__status.is-err { color: var(--error); }
 .ac__empty { margin: 12px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.5; }
 
