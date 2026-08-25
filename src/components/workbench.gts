@@ -149,9 +149,17 @@ export default class Workbench extends Component {
     }
   }
 
+  /**
+   * Minutes accumulated forever, so a panel left open overnight read
+   * "901m 40s" (CCEXT-90). Past an hour the seconds stop being information —
+   * nobody reads the units digit on a 15-hour counter — so they are dropped
+   * rather than carried into a third field nobody scans.
+   */
   get uptimeLabel(): string {
-    const m = Math.floor(this.uptime / 60);
+    const h = Math.floor(this.uptime / 3600);
+    const m = Math.floor((this.uptime % 3600) / 60);
     const s = this.uptime % 60;
+    if (h > 0) return `${h}h ${m}m`;
     return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
 
@@ -230,13 +238,12 @@ export default class Workbench extends Component {
         <MatchAppCard />
       </Section>
 
+      {{! CCEXT-90: the hint that used to sit here explained the panel's
+          persistence to the people who built it. It shipped to every user and
+          would have been read by a store reviewer. A claim about the
+          architecture belongs in the listing copy, not in the workspace. }}
       <Section @id="answers" @sections={{this.sections}}>
         <AnswerDeskCard />
-        <p class="wb__hint">
-          Click into the page, type in a form, switch tabs — then look back.
-          Every draft is still here and the timer never restarted. That is the
-          whole architectural argument, and this is the surface it was made for.
-        </p>
       </Section>
 
       <Section @id="diagnostics" @sections={{this.sections}}>
