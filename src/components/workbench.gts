@@ -27,6 +27,7 @@ import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
+import { application } from '../state/application.ts';
 import { worker } from '../state/worker.ts';
 import { linkPicker } from '../state/link-picker.ts';
 import { me } from '../state/me.ts';
@@ -254,7 +255,12 @@ export default class Workbench extends Component {
           id: 'applications',
           title: 'Applications',
           short: 'Apply',
-          summary: `${me.items.length} snippets`,
+          // Was `${me.items.length} snippets` — a summary of the quick-copy
+          // card, which now lives under Answers (CCEXT-86). A section header
+          // describing a card in a different section is the kind of stale
+          // pointer nobody notices, so it moves with the card rather than
+          // being left to rot.
+          summary: this.applicationSummary,
         },
         {
           id: 'answers',
@@ -272,6 +278,21 @@ export default class Workbench extends Component {
       ],
       me.isStaff,
     );
+  }
+
+  /**
+   * What a COLLAPSED Applications section still tells you.
+   *
+   * Whether this page's posting is being tracked as an application — which is
+   * what the section is FOR, and is the one fact worth surfacing without
+   * opening it. Silent while idle: a section header should not assert
+   * "not tracked" about a page whose post has not been resolved yet, because
+   * that reads as an answer when it is only an absence.
+   */
+  private get applicationSummary(): string {
+    if (application.state === 'tracked') return 'tracked';
+    if (application.state === 'checking' || application.state === 'tracking') return 'checking…';
+    return '';
   }
 
   /**
@@ -320,9 +341,6 @@ export default class Workbench extends Component {
       </Section>
 
       <Section @id="applications" @sections={{this.sections}}>
-        {{! Quick copy first and unconditional: it is useful on every page,
-            including the application form itself, where no post is matched. }}
-        <QuickCopyCard />
         {{! The offer sits ABOVE the card it would populate — accepting it is
             what turns "no post linked" into a trackable application. }}
         <LadderOffer />
@@ -335,6 +353,12 @@ export default class Workbench extends Component {
           would have been read by a store reviewer. A claim about the
           architecture belongs in the listing copy, not in the workspace. }}
       <Section @id="answers" @sections={{this.sections}}>
+        {{! Quick copy belongs to the desk, not to Applications (CCEXT-86).
+            A saved snippet IS an instruction, and pressing one pushes a chip
+            onto the SELECTED question — so it sits ABOVE the desk, in the
+            causal order: pick the directive, then the question it applies to.
+            Its old home under Applications predated this section existing. }}
+        <QuickCopyCard />
         <AnswerDeskCard />
       </Section>
 
