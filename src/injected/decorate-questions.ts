@@ -431,7 +431,18 @@ export function ccDecorateQuestions(
     box.setAttribute('tabindex', '-1');
     box.setAttribute('aria-hidden', 'true');
     box.className = 'b';
-    box.textContent = '⛳';
+    // THE GOLFER, NOT THE FLAG. Doug's rule, and the two are a pair: "the
+    // golfer marks where you swing, the flag marks what you are aiming at."
+    // So the page mark is the golfer — a question you have not answered yet —
+    // and `⛳` belongs to the panel, where question-picker.gts uses it on the
+    // row you have currently selected. This shipped as `⛳` in both places,
+    // which made the mark and the target the same symbol and quietly cost the
+    // distinction its whole meaning.
+    //
+    // The VS16 is deliberate and matches `golfer` in quick-copy-card.gts:
+    // without it the codepoint can render as monochrome text rather than as
+    // the emoji.
+    box.textContent = '🏌️';
     box.addEventListener('click', () => {
       if (!port) return;
       try {
