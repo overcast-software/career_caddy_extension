@@ -348,15 +348,19 @@ export function ccDecorateQuestions(
   //
   // Never write a bare `var(--x)` in here: custom properties DO inherit through
   // a shadow boundary, so a page defining `--accent-500` would repaint our mark.
-  const sheet = new CSSStyleSheet();
-  sheet.replaceSync(
+  //
+  // The text is a const because there are now TWO ways it can reach a shadow
+  // root — see the fallback in the loop below — and they must not drift.
+  const CSS_TEXT =
     ':host { all: initial; }' +
-      '.b { display: block; box-sizing: border-box; text-align: center;' +
-      ' font-size: 13px; cursor: pointer; user-select: none; opacity: 0.55;' +
-      ' background: transparent; border: 0; padding: 0; color: inherit; }' +
-      '.b:hover { opacity: 1; }' +
-      '.b:active { opacity: 1; transform: scale(0.9); }',
-  );
+    '.b { display: block; box-sizing: border-box; text-align: center;' +
+    ' font-size: 13px; cursor: pointer; user-select: none; opacity: 0.55;' +
+    ' background: transparent; border: 0; padding: 0; color: inherit; }' +
+    '.b:hover { opacity: 1; }' +
+    '.b:active { opacity: 1; transform: scale(0.9); }';
+
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(CSS_TEXT);
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]!;
@@ -374,7 +378,46 @@ export function ccDecorateQuestions(
     wrapper.style.setProperty('z-index', '2147483000');
 
     const root = wrapper.attachShadow({ mode: 'closed' });
-    root.adoptedStyleSheets = [sheet];
+
+    // FIREFOX 152 AND EARLIER CANNOT TAKE THIS ASSIGNMENT, AND IT THROWS.
+    //
+    // `adoptedStyleSheets` is an ObservableArray, and until Firefox 153 an
+    // extension content script could not write one through its Xray wrapper:
+    //
+    //     Error: Accessing from Xray wrapper is not supported.
+    //
+    // Mozilla bug 1751346, fixed in 153 (bug 1770592 is its duplicate and
+    // documents the symptom). Reproduced on 152.0.6 with a minimal add-on
+    // doing only these three lines — construction and `replaceSync` succeed,
+    // the ASSIGNMENT is what fails.
+    //
+    // Unhandled, this is not a degraded mark; it is NO marks at all. The
+    // failure lands on the first token, before any wrapper is appended, so the
+    // whole painter unwinds and `state/page.ts#decorateQuestions` catches a
+    // rejection it reasonably reads as "no host permission". Chrome is fine,
+    // so it presents as the feature working on one browser and being invisible
+    // on the other — which is exactly how it was reported (CCEXT-95).
+    //
+    // The fallback gives up the CCEXT-58 property, but far less than it looks:
+    //
+    //   - It only runs where the assignment throws, i.e. Firefox < 153, and
+    //     Firefox exempts content-script-injected styles from the page's CSP
+    //     by design (bug 1415352). Chrome keeps the constructed sheet.
+    //   - Even if a `style-src` did blank it, only the mark's APPEARANCE is in
+    //     here. Its geometry is set through CSSOM `style.setProperty` on the
+    //     wrapper and the box, which `style-src` does not gate — so the worst
+    //     case is an unstyled but correctly placed, still-clickable button,
+    //     not the silent nothing we have today.
+    //
+    // Per-mark rather than probed once: a handful of marks means a handful of
+    // caught throws, and that is cheaper than carrying a capability flag.
+    try {
+      root.adoptedStyleSheets = [sheet];
+    } catch {
+      const fallback = document.createElement('style');
+      fallback.textContent = CSS_TEXT;
+      root.append(fallback);
+    }
 
     const box = document.createElement('button');
     // A typeless <button> inside a <form> defaults to submit. Shadow DOM

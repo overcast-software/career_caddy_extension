@@ -20,6 +20,7 @@ import type { LadderSignals } from '../injected/grab-ladder-signals.ts';
 import type { HintSelectors, RawHints } from '../injected/grab-hints.ts';
 import type { PageQuestion } from '../domain/answer-desk.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
+import { errorLog } from './errors.ts';
 
 // The mark's size and its stylesheet both moved into the painter
 // (`src/injected/decorate-questions.ts`) when the mark stopped being a
@@ -397,9 +398,29 @@ class PageState {
         args: [CC_FIELD_ATTR, tokens, GOLF_PORT],
       });
       return chrome.tabs.connect(tabId, { name: GOLF_PORT, frameId: 0 });
-    } catch {
-      // No host permission, a restricted page, or the tab went away. The panel
-      // list is the complete fallback, so this is not worth interrupting for.
+    } catch (error) {
+      // Still not worth INTERRUPTING for — the panel list is the complete
+      // fallback and a missing accelerator must not become a modal. But it is
+      // very much worth RECORDING, and for a while it was not.
+      //
+      // This catch used to be bare, with a comment naming three benign causes:
+      // no host permission, a restricted page, a tab that went away. All three
+      // are real. The trouble is that a fourth cause — the painter itself
+      // throwing on a platform difference — arrives through the same channel
+      // and was therefore filed as one of the benign three. CCEXT-95 was
+      // exactly that: every mark missing on Firefox, nothing anywhere to say
+      // so, and the only way to find it was to go looking. `swallow the
+      // rejection` is how a hard failure becomes indistinguishable from a
+      // feature that simply does not apply here.
+      //
+      // Diagnostics reads errorLog, so this is the difference between the next
+      // platform divergence being reported as a bug and being noticed by
+      // someone who happened to switch browsers.
+      errorLog.record(
+        'golfer',
+        `Could not paint the in-page marks: ${error instanceof Error ? error.message : String(error)}`,
+        this.host,
+      );
       return null;
     }
   }
