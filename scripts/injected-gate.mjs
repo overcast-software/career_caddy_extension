@@ -49,6 +49,33 @@ const PAGE_GLOBALS = new Set([
   'WeakMap', 'WeakSet', 'Promise', 'Error', 'TypeError', 'Infinity', 'NaN',
   'undefined', 'globalThis', 'parseInt', 'parseFloat', 'isNaN', 'setTimeout',
   'clearTimeout', 'getComputedStyle', 'MutationObserver',
+  // The golfer painter's change detection (ccDecorateQuestions). All five are
+  // page globals in both targets; they are listed because the gate's default
+  // is refusal, not because they are unusual.
+  //
+  // ResizeObserver is the load-bearing one and the reason it is not enough to
+  // copy keepassxc-browser: a <textarea> has a native resize grabber, and a
+  // drag on it fires NO window resize and NO scroll. They have no
+  // ResizeObserver anywhere because they only ever decorate <input>.
+  //
+  // CSSStyleSheet is constructed rather than declared as a <style> element
+  // deliberately — adoptedStyleSheets is not subject to the page's style-src,
+  // so a strict-CSP ATS cannot blank the marks (CCEXT-58).
+  'requestAnimationFrame', 'cancelAnimationFrame',
+  'ResizeObserver', 'IntersectionObserver', 'CSSStyleSheet',
+  // ISOLATED-WORLD AMBIENT, and the only entry here that is not a page global.
+  //
+  // `executeScript({func})` runs in the extension's isolated world, which the
+  // page cannot see but which DOES carry `chrome.runtime` — that is how
+  // ccDecorateQuestions accepts a port from the panel. In the MAIN world there
+  // is no `chrome`, so this allowance is only sound while nothing sets
+  // `world: 'MAIN'`.
+  //
+  // scripts/layering-gate.mjs forbids that. Note the pairing is a CONVENTION,
+  // not a construction: that gate reads `src/` and this one reads `dist/`, so
+  // neither can enforce the other. If you ever add `world: 'MAIN'`, remove
+  // this entry in the same commit.
+  'chrome',
   'HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLSelectElement',
   'HTMLAnchorElement', 'HTMLLabelElement', 'Element', 'NodeList',
 ]);

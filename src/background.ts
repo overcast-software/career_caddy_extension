@@ -102,6 +102,46 @@ interface ScoreCtx {
   jobPostId: string;
   title: string;
   polls: number;
+  /**
+   * The page the whole chain started on, carried through from `WatchCtx` for
+   * one reason: the panel has to know whether an announcement is about the tab
+   * it is currently showing. Without it a score finishing for the Toptal
+   * posting would clear the send status on whatever page the user had moved to
+   * (CCEXT-33). Not used for anything else here.
+   */
+  url: string;
+}
+
+/**
+ * Tell the panel, if one is listening.
+ *
+ * ── EVERY TERMINAL EXIT CALLS THIS, INCLUDING THE ONES THAT GIVE UP ────────
+ *
+ * That is a hard rule now rather than a nicety. The send button stays disabled
+ * while a watch is outstanding (CCEXT-97), so a path that stops watching
+ * without announcing does not merely fail to update the panel — it leaves a
+ * dead control until the user navigates. Before CCEXT-96 the give-up paths
+ * were deliberately silent, with the reasoning that "still working" is not
+ * worth an OS alert. That reasoning still holds for `notify()`; it does not
+ * hold here, because this costs the user nothing and its absence costs them a
+ * button.
+ *
+ * ── WHY THE REJECTION IS SWALLOWED ─────────────────────────────────────────
+ *
+ * With no panel open there is no receiver and `sendMessage` rejects with
+ * "Could not establish connection". That is the NORMAL case — the worker
+ * exists precisely for when the panel is closed — so an unhandled rejection
+ * here would fill the worker's console with noise on the happy path. It is
+ * genuinely nothing to act on: the panel re-derives everything on boot.
+ */
+function announce(url: string, phase: string, jobPostId: string | null): void {
+  try {
+    void chrome.runtime
+      .sendMessage({ type: 'cc-scrape-progress', url, phase, jobPostId })
+      .catch(() => {});
+  } catch {
+    /* older shapes throw synchronously instead of rejecting */
+  }
 }
 
 /**
@@ -166,8 +206,29 @@ function jobPostUrl(jobPostId: string | null, scoreId: string | null): string | 
   return scoreId ? `${base}/scores/${scoreId}` : base;
 }
 
-/** The panel asks for a watch; it does NOT hand over the credential. */
-chrome.runtime.onMessage.addListener((msg: unknown) => {
+/**
+ * The panel asks for a watch; it does NOT hand over the credential.
+ *
+ * ── THE ACK IS NOT COURTESY ────────────────────────────────────────────────
+ *
+ * `sendResponse` is called synchronously, and the panel waits for it. That is
+ * load-bearing as of CCEXT-97: the send button now stays disabled until this
+ * watch announces a result, so the panel has to know the watch actually
+ * EXISTS before it commits to waiting on one. A handoff that quietly went
+ * nowhere would otherwise leave a dead button until the user navigated.
+ *
+ * It is answered explicitly rather than left to resolve on its own because
+ * the no-listener and listener-declined-to-answer cases are not reliably
+ * distinguishable from the sender's side across both browsers. An explicit
+ * ack removes the question instead of betting on it.
+ *
+ * Answered BEFORE the storage write, deliberately. The ack means "this worker
+ * received it and is starting a watch", which is true at this point and is
+ * what the panel is asking. Waiting for the alarm to be created would mean
+ * returning true and holding the channel open, and a worker that is
+ * terminated mid-write would then hang the panel rather than reject it.
+ */
+chrome.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
   const m = msg as
     | { type?: string; scrapeId?: string; url?: string; autoScore?: boolean }
     | null;
@@ -178,6 +239,7 @@ chrome.runtime.onMessage.addListener((msg: unknown) => {
     polls: 0,
     autoScore: m.autoScore === true,
   };
+  sendResponse({ watching: true });
   void chrome.storage.session
     .set({ [ALARM_PREFIX + ctx.scrapeId]: ctx })
     .then(() =>
@@ -186,7 +248,12 @@ chrome.runtime.onMessage.addListener((msg: unknown) => {
         delayInMinutes: POLL_PERIOD_MIN,
       }),
     )
-    .catch(() => {});
+    .catch(() => {
+      // The watch could not be armed after we said it would be. Tell the panel
+      // so it stops waiting — this is the one path where the ack was honest
+      // when sent and wrong a moment later.
+      announce(ctx.url, 'gave-up', null);
+    });
   return false;
 });
 
@@ -221,7 +288,7 @@ async function apiKey(): Promise<string | undefined> {
  * so the caller can fall back to announcing the post on its own rather than
  * leaving the user with no notification at all.
  */
-async function beginScore(jobPostId: string, title: string): Promise<boolean> {
+async function beginScore(jobPostId: string, title: string, url: string): Promise<boolean> {
   const key = await apiKey();
   if (!key) return false;
   try {
@@ -246,7 +313,7 @@ async function beginScore(jobPostId: string, title: string): Promise<boolean> {
     const scoreId = body.data?.id ? String(body.data.id) : '';
     if (!scoreId) return false;
 
-    const ctx: ScoreCtx = { scoreId, jobPostId, title, polls: 0 };
+    const ctx: ScoreCtx = { scoreId, jobPostId, title, polls: 0, url };
     await chrome.storage.session.set({ [SCORE_PREFIX + scoreId]: ctx });
     await chrome.alarms.create(SCORE_PREFIX + scoreId, {
       periodInMinutes: POLL_PERIOD_MIN,
@@ -270,12 +337,18 @@ async function pollScore(scoreId: string): Promise<void> {
   const token = await apiKey();
   if (!ctx || !token) {
     await stopAlarm(key);
+    // The POST already succeeded, so the post is in the library even though
+    // the score is now unwatched — `done`, not `gave-up`, and the panel gets
+    // to swap in the tracked card. With no ctx there is no url to scope it to;
+    // '' still reaches the workbench's page-agnostic listener.
+    announce(ctx?.url ?? '', 'done', ctx?.jobPostId ?? null);
     return;
   }
 
   ctx.polls += 1;
   if (ctx.polls > MAX_POLLS) {
     await stopAlarm(key);
+    announce(ctx.url, 'done', ctx.jobPostId);
     return;
   }
   try {
@@ -294,7 +367,10 @@ async function pollScore(scoreId: string): Promise<void> {
       },
     });
     if (!resp.ok) {
-      if (resp.status === 401 || resp.status === 403) await stopAlarm(key);
+      if (resp.status === 401 || resp.status === 403) {
+        await stopAlarm(key);
+        announce(ctx.url, 'done', ctx.jobPostId);
+      }
       return;
     }
     const body = (await resp.json()) as {
@@ -309,6 +385,12 @@ async function pollScore(scoreId: string): Promise<void> {
 
   if (status !== 'completed' && status !== 'failed') return;
   await stopAlarm(key);
+
+  // Both outcomes are `done` from the panel's point of view, and deliberately
+  // so: the JobPost exists either way, which is what the tracked card renders.
+  // A failed SCORE is not a failed send, and collapsing the two would put an
+  // error on a post that is sitting there perfectly fine.
+  announce(ctx.url, 'done', ctx.jobPostId);
 
   // As deep as the ids allow — straight to THIS score, not the scores list.
   const url = jobPostUrl(ctx.jobPostId, scoreId);
@@ -350,13 +432,19 @@ async function pollOnce(scrapeId: string): Promise<void> {
   // Disconnected mid-watch: stop rather than poll unauthenticated forever.
   if (!ctx || !apiKey) {
     await stopWatch(scrapeId);
+    announce(ctx?.url ?? '', 'gave-up', null);
     return;
   }
 
   ctx.polls += 1;
   if (ctx.polls > MAX_POLLS) {
     await stopWatch(scrapeId);
-    return; // Deliberately silent. "Still working" is not worth an OS alert.
+    // Still deliberately silent as far as the OS is concerned — "still
+    // working" is not worth an alert. The PANEL is a different audience: it
+    // has a disabled button waiting on this, and telling it we stopped
+    // looking costs nothing and un-sticks the UI.
+    announce(ctx.url, 'gave-up', null);
+    return;
   }
   try {
     await chrome.storage.session.set({ [key]: ctx });
@@ -379,7 +467,10 @@ async function pollOnce(scrapeId: string): Promise<void> {
     if (!resp.ok) {
       // A single bad response is not terminal — the next alarm retries. Only
       // an auth failure is worth abandoning, since it will not fix itself.
-      if (resp.status === 401 || resp.status === 403) await stopWatch(scrapeId);
+      if (resp.status === 401 || resp.status === 403) {
+        await stopWatch(scrapeId);
+        announce(ctx.url, 'gave-up', null);
+      }
       return;
     }
     const body = (await resp.json()) as {
@@ -401,6 +492,7 @@ async function pollOnce(scrapeId: string): Promise<void> {
 
   const host = hostOf(ctx.url);
   if (status !== 'completed') {
+    announce(ctx.url, 'failed', null);
     await notify(
       'Career Caddy',
       host ? `Couldn't parse the posting from ${host}.` : "Couldn't parse that posting.",
@@ -416,13 +508,20 @@ async function pollOnce(scrapeId: string): Promise<void> {
   // cannot start, say "added" and stop — silence would be worse.
   if (ctx.autoScore && jobPostId) {
     await notify('Career Caddy — added ✓', title, jobPostUrl(jobPostId, null));
-    const started = await beginScore(jobPostId, title);
+    const started = await beginScore(jobPostId, title, ctx.url);
+    // ANNOUNCED AFTER the attempt, not before, because the two outcomes are
+    // different phases: a started score leaves the panel watching, a failed
+    // start is the end of the line. Announcing `scoring` up front and then
+    // having to retract it would put the panel through a state it was never
+    // really in.
+    announce(ctx.url, started ? 'scoring' : 'done', jobPostId);
     if (!started) {
       await notify('Career Caddy — added ✓ (could not start scoring)', title, jobPostUrl(jobPostId, null));
     }
     return;
   }
 
+  announce(ctx.url, 'done', jobPostId);
   await notify('Career Caddy — added ✓', title, jobPostUrl(jobPostId, null));
 }
 

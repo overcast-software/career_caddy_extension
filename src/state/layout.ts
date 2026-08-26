@@ -17,6 +17,7 @@ export type LayoutMode = 'accordion' | 'tabs';
 
 const STORAGE_KEY = 'ccLayoutMode';
 const QC_EXPANDED_KEY = 'ccQuickCopyExpanded';
+const ANSWER_LIST_KEY = 'ccAnswerListExpanded';
 
 /**
  * `@tracked` is not a component feature — it works on any class. That single
@@ -64,12 +65,31 @@ class LayoutState {
    */
   @tracked quickCopyExpanded = false;
 
+  /**
+   * The answer desk's question picker: a dropdown, or every question as rows?
+   *
+   * Doug asked for both — *"a dropdown of questions and an alternate with a
+   * list of all the questions"* — so they are two views of ONE list with
+   * exactly one on screen, the same shape as quickCopyExpanded above.
+   *
+   * COLLAPSED (the `<select>`) IS THE DEFAULT, for the identical reason: the
+   * storage read is async, so a slow read can only settle INTO the taller
+   * state, never flash out of it. Defaulting to the list would make the panel
+   * visibly shrink on every open.
+   */
+  @tracked answerListExpanded = false;
+
   async load(): Promise<void> {
     try {
-      const saved = await chrome.storage.local.get([STORAGE_KEY, QC_EXPANDED_KEY]);
+      const saved = await chrome.storage.local.get([
+        STORAGE_KEY,
+        QC_EXPANDED_KEY,
+        ANSWER_LIST_KEY,
+      ]);
       const mode = saved[STORAGE_KEY];
       if (mode === 'tabs' || mode === 'accordion') this.mode = mode;
       if (saved[QC_EXPANDED_KEY] === true) this.quickCopyExpanded = true;
+      if (saved[ANSWER_LIST_KEY] === true) this.answerListExpanded = true;
     } catch {
       // Storage unavailable (e.g. rendered outside an extension context).
       // The default is fine; this is a preference, not data.
@@ -124,6 +144,17 @@ class LayoutState {
     }
   }
 
+  toggleAnswerList(): void {
+    this.answerListExpanded = !this.answerListExpanded;
+    try {
+      void chrome.storage.local
+        .set({ [ANSWER_LIST_KEY]: this.answerListExpanded })
+        .catch(() => {});
+    } catch {
+      /* no extension storage here; the view still switched. */
+    }
+  }
+
   toggle(id: string): void {
     if (this.mode === 'tabs') {
       this.activeId = id;
@@ -138,9 +169,12 @@ class LayoutState {
     this.openIds = next;
   }
 
-  isVisible(id: string): boolean {
-    return this.mode === 'tabs' ? this.activeId === id : this.openIds.has(id);
-  }
+  // NOTE: there is deliberately no `isVisible(id)` here any more (CCEXT-88).
+  // It answered from `activeId` alone, and this class has no idea which
+  // sections are rendered — so once Diagnostics became staff-only it would
+  // have kept naming a hidden tab as the active one. The section-aware answer
+  // is domain/sections.ts:resolveActiveId, and having exactly one of them is
+  // the point: two visibility answers is how a panel renders nothing.
 }
 
 /**
@@ -160,3 +194,10 @@ export const LAYOUT_STORAGE_KEY = STORAGE_KEY;
 
 /** Same reasoning as LAYOUT_STORAGE_KEY: device preference, never wiped. */
 export const QUICK_COPY_EXPANDED_KEY = QC_EXPANDED_KEY;
+
+/**
+ * Same again. Note what this is NOT: `ccAnswerDrafts` holds the answers
+ * themselves and IS user data, so it sits in USER_SCOPED_STORAGE_KEYS and is
+ * wiped on disconnect. Which VIEW you prefer is not.
+ */
+export const ANSWER_LIST_EXPANDED_KEY = ANSWER_LIST_KEY;

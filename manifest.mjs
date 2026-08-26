@@ -55,7 +55,24 @@ const ICONS = {
 
 const SHARED = {
   manifest_version: 3,
-  name: 'Career Caddy Sender',
+  // DISPLAY NAME ONLY. "Sender" described a popup whose whole job was one
+  // button; the panel sends, tracks, scores, matches applications, answers
+  // form questions and holds quick copy, so the old name advertised the
+  // smallest of six things it does (CCEXT-100).
+  //
+  // THREE IDENTIFIERS DELIBERATELY KEEP THE OLD SPELLING, and none of them is
+  // an oversight — Doug's call, 2026-08-25: "keep the slug, just rename the
+  // display title."
+  //
+  //   - the gecko `id` below. It IS the add-on's identity to Firefox; change
+  //     it and AMO treats the upload as a different add-on entirely.
+  //   - the AMO listing slug, addons.mozilla.org/…/career-caddy-sender/. It
+  //     does not follow the display name and every existing link dies with it.
+  //   - package.json's npm-safe `name`, which is what the built artifact
+  //     filenames and RELEASING.md are written against.
+  //
+  // So the user-visible string moves and nothing addressable does.
+  name: 'Career Caddy',
   version: VERSION,
   description:
     'Send the active job posting to Career Caddy, and answer application questions with your own career data.',

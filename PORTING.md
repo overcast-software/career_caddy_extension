@@ -20,27 +20,111 @@ This is the checklist instead. Source of truth is frontend commit `95aad96^`
 | | Count | |
 |---|---|---|
 | DOM plumbing — genuinely deleted by Glimmer | 55 | `show*`/`hide*`/`render*`/`reset*Card`/`setStatus` — `{{#if}}` and `{{#each}}` replace these outright |
-| Ported | 76 | |
-| **Not yet ported** | **40** | |
+| Ported | 94 | |
+| Dropped with a reason | 2 | both in the answer desk; see below |
+| **Not yet ported** | **20** | |
 
-Excluding the 55 the framework deletes, that is **76 of 116 real functions
-done — 66%.**
+Excluding the 55 the framework deletes, that is **94 of 116 real functions
+resolved — 81%.**
 
-Of the 40 left, **20 are the answer desk** (CCEXT-45), deliberately deferred
-behind "functionality and form convergence first". The other 20 are spread
-across the four sections below and counted per-section there — the ✅ marks are
-the source of this table, so recount them rather than trusting the number.
+The remaining 20 are spread across the sections below and counted per-section
+there — the ✅ marks are the source of this table, so recount them rather than
+trusting the number.
 
 ## Not yet ported, by subsystem
 
-### Answer desk — 20 functions (phase 2, CCEXT-45, known and deliberate)
-`answerReuseVerdict` `autoDeliverAnswer` `ccResolveFieldInPage`
-`ccWriteFieldInPage` `insertAnswerIntoField` `requestAiAnswer`
-`pollAnswerUntilTerminal` `findExistingAnswer` `mintQuestion`
-`handleAnswerSelected` `primeAnswerSelection` `resolveSelectionTarget`
-`setAnswerFieldTarget` `maybeRestoreAnswer` `maybeResumeAnswer`
-`saveAnswerResult` `clearAnswerPending` `copyAnswerToClipboard` `answerSleep`
-`handleAskAgent`
+### Answer desk — 20 functions (phase 2, CCEXT-45, **DONE**)
+
+**The classifier, `injected/resolve-field.ts`:**
+`ccResolveFieldInPage` ✅ — BOTH ladders in ONE function, as the WIP commit
+`5c0886f` (frontend, branch `feature/ccext-form-question-dropdown-refine`)
+established. `'selection'` walks a highlight forward to its control;
+`'scan'` enumerates every field and walks each one backward to its label.
+They share `fieldKind()` because `executeScript` serializes a SINGLE function,
+so a second injected scanner would need its own copy — and a forked classifier
+is exactly the failure CCEXT-30 was filed for. `ccWriteFieldInPage` ✅ —
+native prototype setter + bubbling `input`/`change`, `execCommand('insertText')`
+for contenteditable.
+
+**A build trap found while porting, and it is general.** `esbuild:
+{ keepNames: true }` rewrites every named function — declaration, named
+expression, AND arrow assigned to a const — into `__name(fn, "original")`.
+Inside an injected function that helper is a module-scope reference the page
+does not have, so the whole function throws on injection. `injected-gate.mjs`
+caught it (`references module scope: l`). Object-literal methods are the one
+form esbuild leaves alone, measured against esbuild directly rather than
+guessed, so shared helpers live in a `const h = { … }`. The rule is now
+written down in `injected/grab-payload.ts`'s header, which is where the other
+injected files are told to look. No earlier injected function had nested
+helpers, which is why this had never fired.
+
+**CCEXT-30 is now expressed in the type system.** `ResolvedField` is a
+discriminated union: the text arm HAS a token, the choice arm's is `null` by
+construction because the scanner never stamps one. The write path takes the
+text arm, so handing it a dropdown is a compile error rather than a support
+ticket.
+
+**The pure rules, `domain/answer-desk.ts` + `domain/answer-reuse.ts` (41 tests):**
+`answerReuseVerdict` ✅ `autoDeliverAnswer` ✅ (as `autoInsertDecision`, a
+second discriminated union — a refusal carries no token, so the caller
+*cannot* write off the back of one).
+
+**The HTTP, `data/answers.ts`:**
+`findExistingAnswer` ✅ (as `findSavedAnswer`) `mintQuestion` ✅
+`requestAiAnswer` ✅ (as `requestAnswer`, and it now sends `injected_prompt` —
+the api has accepted it all along, from four nesting levels; the extension had
+simply never sent one. **No api change was needed.**)
+
+**The orchestration, `state/answer-desk.ts` + `components/answer-desk.gts`:**
+`handleAnswerSelected` ✅ (as `run()` — one action with two identities,
+Answer before a draft exists and Refine after) `pollAnswerUntilTerminal` ✅
+`insertAnswerIntoField` ✅ `maybeResumeAnswer` ✅ (as `reconcile()`)
+`maybeRestoreAnswer` ✅ (restoration is now structural: drafts are keyed by
+label + occurrence, so a rescan re-attaches them without anything asking)
+`saveAnswerResult` ✅ `clearAnswerPending` ✅ `copyAnswerToClipboard` ✅
+`answerSleep` ✅ `resolveSelectionTarget` ✅ (as `page.scanQuestions()`,
+which also re-derives `occurrence` ACROSS frames — the injected scanner counts
+within its own frame, so two frames each holding a "Why?" box would collide on
+one draft key).
+
+**Keyed on label + occurrence, never on the `data-cc-field` token.** Tokens are
+regenerated on every scan and die on reload, so a draft keyed on one detaches
+exactly when the page re-renders — which is when you most want it back.
+Identical labels are NOT deduped: a form with two "Why?" boxes is asking two
+questions.
+
+**Page-scoping is the SHAPE, not a check.** The store is `url -> key -> draft`,
+so there is no lookup that can return another page's draft. CCEXT-43's lesson
+was that the popup did this correctness work for free by dying on blur;
+a runtime `if (draft.url === page.url)` would be one edit away from being
+forgotten, and the thing it guards is an answer written for one employer
+landing in another's form.
+
+**Dropped, with reasons:**
+
+| Function | Verdict | Reason |
+|---|---|---|
+| `primeAnswerSelection` | **DROP (superseded)** | Its whole job was to read the page selection on tab-open and echo it, because the popup died the moment you clicked into the page to highlight anything. The picker is CCEXT-26 M2 replacing that entry point, and re-reading the selection on every open would be a page read for convenience — declined on Doug's standing rule. |
+| `setAnswerFieldTarget` | **DROP (superseded)** | The singular `answerFieldTarget` it maintained does not exist here; targets are per-entry, which is the ticket's own legacy→here table. |
+
+**Reclassified:** `handleAskAgent` was filed under the answer desk and is not
+part of it — it is the CC-135 match-application click handler, already ported
+as `state/match-app.ts` + `components/match-app-card.gts` under CCEXT-50.
+
+**Deliberately NOT built: a transcript.** Doug's comment on CCEXT-45 reopened
+refine-in-place vs. an accumulating transcript, on the grounds that the panel
+has the vertical space for one. It stays refine-in-place for now, and the
+reason it is safe to defer is that **the turn history already exists
+server-side**: `Answer.question` is a FK with `related_name="answers"` and
+`ordering = ["-created_at"]`, so every generate and every refine is another row
+against the same Question. There is no client-side transcript to invent, and
+switching to one later is a change to `components/answer-desk.gts` with no data
+to migrate.
+
+**Not verified by running it.** The gates, the type checker and the domain
+tests are green; nothing here has been exercised against a real Greenhouse
+form in a loaded extension. The acceptance criteria in CCEXT-45 are a
+human-at-the-browser check and remain open.
 
 ### Signal ladder / match application — 22 functions (CCEXT-50, IN PROGRESS)
 

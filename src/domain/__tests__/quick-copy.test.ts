@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composeQuickCopyItems, isLinkLike, previewOf } from '../quick-copy.ts';
+import { actionFor, composeQuickCopyItems, isLinkLike, previewOf } from '../quick-copy.ts';
 
 describe('composeQuickCopyItems', () => {
   it('seeds LinkedIn and GitHub from their own fields, pinned and first', () => {
@@ -112,5 +112,41 @@ describe('isLinkLike', () => {
   it('rejects other schemes rather than opening them', () => {
     expect(isLinkLike('javascript:alert(1)')).toBe(false);
     expect(isLinkLike('file:///etc/passwd')).toBe(false);
+  });
+});
+
+describe('actionFor', () => {
+  const PROMPT = 'This is a Toptal form — write in the third person.';
+
+  it('sends a prose snippet to the desk when a question is selected', () => {
+    // The headline of CCEXT-86: a saved prompt IS an instruction, so it joins
+    // the stack the desk already keeps rather than the clipboard.
+    expect(actionFor(PROMPT, true)).toBe('inject');
+  });
+
+  it('copies a prose snippet when nothing is selected to attach it to', () => {
+    // Instruction stacks are per-question. With no question there is no stack,
+    // and copying is the honest answer — the card is responsible for saying so.
+    expect(actionFor(PROMPT, false)).toBe('copy');
+  });
+
+  it('copies a link even with a question selected', () => {
+    // A bare profile URL under a heading the api labels PRIORITY instructions
+    // is not an instruction. This is the isLinkLike affordance split, not a
+    // filter — the item is still listed, still pressable, still useful.
+    expect(actionFor('https://linkedin.com/in/x', true)).toBe('copy');
+    expect(actionFor('https://github.com/x', true)).toBe('copy');
+  });
+
+  it('treats prose that merely mentions a URL as prose', () => {
+    // Matches isLinkLike's own rule: any whitespace means prose. A prompt that
+    // cites a link is still a prompt.
+    expect(actionFor('Refer to https://example.com in the answer', true)).toBe('inject');
+  });
+
+  it('copies an empty value rather than pushing an empty chip', () => {
+    // Unreachable through composeQuickCopyItems, which skips empty entries —
+    // asserted so the rule stays total if a caller ever changes.
+    expect(actionFor('   ', true)).toBe('copy');
   });
 });

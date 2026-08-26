@@ -70,7 +70,22 @@ for await (const file of files(root)) {
       }
     }
 
-    // 3. components/ render. They do not fetch, store, or call browser APIs —
+    // 3. NOTHING may ask executeScript for the MAIN world.
+    //
+    // Paired with `'chrome'` in scripts/injected-gate.mjs's PAGE_GLOBALS. That
+    // allowance is sound only because injected functions run in the ISOLATED
+    // world, where `chrome.runtime` exists; in the MAIN world it does not, and
+    // ccDecorateQuestions would throw a ReferenceError in the page while still
+    // passing the injected gate.
+    //
+    // The two gates read different artifacts — this one `src/`, that one
+    // `dist/` — so this is a convention held by two rules, not an invariant
+    // either one enforces. Both halves move together or neither does.
+    if (!isComment && /world:\s*['"]MAIN['"]/.test(text)) {
+      note(file, n, "executeScript world: 'MAIN'", text.trim());
+    }
+
+    // 4. components/ render. They do not fetch, store, or call browser APIs —
     //    those belong to state/ and data/, which components read through.
     if (rel.startsWith('components/') && !isComment) {
       if (/\bfetch\s*\(/.test(text)) note(file, n, 'component calls fetch', text.trim());

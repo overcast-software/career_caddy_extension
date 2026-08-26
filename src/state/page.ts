@@ -4,9 +4,37 @@ import type { PagePayload } from '../injected/grab-payload.ts';
 import { ccGrabHints } from '../injected/grab-hints.ts';
 import { ccGrabLadderSignals } from '../injected/grab-ladder-signals.ts';
 import { ccGrabExcerpt } from '../injected/grab-excerpt.ts';
+import {
+  CC_FIELD_ATTR,
+  CC_GOLF_ATTR,
+  ccResolveFieldInPage,
+  ccWriteFieldInPage,
+} from '../injected/resolve-field.ts';
+import { GOLF_PORT, ccDecorateQuestions } from '../injected/decorate-questions.ts';
+import type {
+  ScanResult,
+  SelectionResult,
+  WriteOutcome,
+} from '../injected/resolve-field.ts';
 import type { LadderSignals } from '../injected/grab-ladder-signals.ts';
 import type { HintSelectors, RawHints } from '../injected/grab-hints.ts';
+import type { PageQuestion } from '../domain/answer-desk.ts';
 import { SELF_HOSTS } from '../lib/api.ts';
+import { errorLog } from './errors.ts';
+
+// The mark's size and its stylesheet both moved into the painter
+// (`src/injected/decorate-questions.ts`) when the mark stopped being a
+// pseudo-element. Size is now derived per field from its height rather than
+// being one constant, and the rules live in a constructed CSSStyleSheet inside
+// each mark's shadow root — so there is nothing left for this module to hold
+// and, notably, no `removeCSS` string that has to stay byte-identical to the
+// `insertCSS` one.
+
+// The `[data-cc-golf]::after` stylesheet that stood here is deleted, not
+// moved. It could not have worked against a field: `input` and `textarea` are
+// REPLACED elements with no internal content model, so they never box
+// generated content. It was written for a LABEL anchor, and the label anchor
+// is what CCEXT-57 retired.
 
 /** What capture() returns: the merged page plus how it was assembled. */
 export interface CapturedPage extends PagePayload {
@@ -245,6 +273,182 @@ class PageState {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * Every labelled form field on the page, in every frame we can reach.
+   *
+   * `allFrames: true` for the same reason capture() needs it: the classic
+   * Greenhouse setup is an ATS form embedded in company.com/careers, and
+   * reading only the top frame finds no questions at all on exactly the pages
+   * this feature exists for. Cross-origin frames stay invisible — that is a
+   * permission boundary, and countBlockedFrames() is how the panel says so
+   * instead of letting it read as "this form has no questions".
+   *
+   * `frameId` rides along because the WRITE has to go back into the same frame
+   * the field came from.
+   *
+   * OCCURRENCE IS RECOUNTED HERE, ACROSS FRAMES. The injected scanner counts
+   * within its own frame, so two frames each holding a "Why?" box would both
+   * report occurrence 0 and collide on one draft key. Frames are merged in
+   * frameId order (0 is always the top frame) and the count re-derived over the
+   * merged list, so the key is unique across the whole page.
+   */
+  async scanQuestions(): Promise<PageQuestion[]> {
+    if (this.tabId === undefined) return [];
+    // The resolver serves both ladders, so its declared return type is the
+    // union of both. `executeScript` cannot know which mode we asked for — it
+    // just hands back whatever the function returned — so this is the one
+    // place the two shapes are told apart, by a narrow rather than by an `as`
+    // at every read.
+    let results: chrome.scripting.InjectionResult<ScanResult | SelectionResult>[];
+    try {
+      results = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId, allFrames: true },
+        func: ccResolveFieldInPage,
+        // Through `args`, never a closure — see scripts/injected-gate.mjs.
+        args: [CC_FIELD_ATTR, 'scan', CC_GOLF_ATTR],
+      });
+    } catch {
+      return [];
+    }
+
+    const ordered = [...results].sort((a, b) => (a.frameId ?? 0) - (b.frameId ?? 0));
+    const merged: PageQuestion[] = [];
+    const counts = new Map<string, number>();
+    for (const frame of ordered) {
+      const scan = frame.result;
+      if (!scan || !('fields' in scan)) continue;
+      for (const field of scan.fields) {
+        const seen = counts.get(field.label) ?? 0;
+        counts.set(field.label, seen + 1);
+        merged.push({ ...field, occurrence: seen, frameId: frame.frameId ?? 0 });
+      }
+    }
+    return merged;
+  }
+
+  /**
+   * Write into a previously stamped field, in the frame it was stamped in.
+   *
+   * The token is the only handle — it is the sole thing that survives the
+   * round trip out of the page and back. `gone` means the page re-rendered and
+   * dropped the stamp, which must NOT be retried blind: whatever now occupies
+   * that position is not the field the user chose.
+   */
+  async writeField(
+    frameId: number,
+    token: string,
+    value: string,
+  ): Promise<WriteOutcome> {
+    if (this.tabId === undefined) return { ok: false, reason: 'gone' };
+    try {
+      const [hit] = await chrome.scripting.executeScript({
+        target: { tabId: this.tabId, frameIds: [frameId] },
+        func: ccWriteFieldInPage,
+        args: [CC_FIELD_ATTR, token, value],
+      });
+      return hit?.result ?? { ok: false, reason: 'gone' };
+    } catch {
+      return { ok: false, reason: 'gone' };
+    }
+  }
+
+  /**
+   * The golfer marks: paint them, and hand back the port that keeps them alive.
+   *
+   * TWO STEPS, AND THE ORDER MATTERS.
+   *
+   *   1. `executeScript` — paints the marks and starts LISTENING for a port.
+   *      It must run before step 2 or the connect finds no listener and is
+   *      dropped.
+   *   2. `tabs.connect` — the panel dials the tab it already chose.
+   *
+   * There used to be an `insertCSS` step ahead of both, because the mark was a
+   * `[data-cc-golf]::after` pseudo-element. That is gone: `input` and
+   * `textarea` are REPLACED elements and cannot render `::before`/`::after` at
+   * all, so anchoring to the field and using a pseudo-element are mutually
+   * exclusive. The mark is now a real element in a closed shadow root, and its
+   * rules ride in a constructed `CSSStyleSheet` via `adoptedStyleSheets` —
+   * which is likewise not subject to the page's `style-src`, so the CSP
+   * argument survives the change intact.
+   *
+   * THE PANEL DECIDES WHAT GETS PAINTED. `tokens` is the merged, prose-only
+   * list; the painter resolves each against `data-cc-field` and does no
+   * classification of its own. That keeps question identity in one place
+   * (CCEXT-59) and avoids a second field classifier, which is the exact
+   * failure CCEXT-30 was filed for.
+   *
+   * `allFrames` is deliberately absent from `insertCSS`/`executeScript` here in
+   * MVP: `tabs.connect` addresses ONE frame, so painting frames we cannot then
+   * wire up would produce marks that do nothing. Frame 0 only, and the panel
+   * list covers the rest.
+   */
+  async decorateQuestions(tokens: string[]): Promise<chrome.runtime.Port | null> {
+    const tabId = this.tabId;
+    if (tabId === undefined) return null;
+    if (tokens.length === 0) return null;
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: ccDecorateQuestions,
+        // GOLF_PORT rides in `args` rather than being read from module scope
+        // inside the painter — see the note at its use site. This is the only
+        // copy of the name; the connect below uses the same const.
+        args: [CC_FIELD_ATTR, tokens, GOLF_PORT],
+      });
+      return chrome.tabs.connect(tabId, { name: GOLF_PORT, frameId: 0 });
+    } catch (error) {
+      // Still not worth INTERRUPTING for — the panel list is the complete
+      // fallback and a missing accelerator must not become a modal. But it is
+      // very much worth RECORDING, and for a while it was not.
+      //
+      // This catch used to be bare, with a comment naming three benign causes:
+      // no host permission, a restricted page, a tab that went away. All three
+      // are real. The trouble is that a fourth cause — the painter itself
+      // throwing on a platform difference — arrives through the same channel
+      // and was therefore filed as one of the benign three. CCEXT-95 was
+      // exactly that: every mark missing on Firefox, nothing anywhere to say
+      // so, and the only way to find it was to go looking. `swallow the
+      // rejection` is how a hard failure becomes indistinguishable from a
+      // feature that simply does not apply here.
+      //
+      // Diagnostics reads errorLog, so this is the difference between the next
+      // platform divergence being reported as a bug and being noticed by
+      // someone who happened to switch browsers.
+      errorLog.record(
+        'golfer',
+        `Could not paint the in-page marks: ${error instanceof Error ? error.message : String(error)}`,
+        this.host,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Remove the styling from a tab.
+   *
+   * Takes an explicit `tabId` because the common caller is a NAVIGATION or a
+   * tab switch, by which time `this.tabId` is the new tab and the marks need
+   * cleaning off the old one. Passing the current tab here is how CCEXT-56's
+   * orphaned icons happen.
+   *
+   * NOW A NO-OP, DELIBERATELY KEPT. Teardown is entirely page-side: the
+   * painter's `onDisconnect` removes its own wrappers, its observers and its
+   * listeners, and dropping the port is what triggers it. There is no longer
+   * any extension-injected CSS to take back, because the mark's rules live in
+   * a constructed stylesheet inside a shadow root that goes away with the
+   * wrapper.
+   *
+   * The method stays because the CALL SITE is still correct and still subtle:
+   * it takes an explicit `tabId` because the common caller is a navigation or
+   * a tab switch, by which time `this.tabId` is the NEW tab and the marks that
+   * need cleaning are on the old one. Passing the current tab here is how
+   * CCEXT-56's orphaned icons happen. Deleting the method would invite someone
+   * to re-derive that, and get it wrong.
+   */
+  async undecorateQuestions(tabId: number): Promise<void> {
+    void tabId;
   }
 
   async countBlockedFrames(): Promise<number> {
