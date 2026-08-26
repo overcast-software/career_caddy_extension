@@ -27,6 +27,7 @@ import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
+import { worker } from '../state/worker.ts';
 import { linkPicker } from '../state/link-picker.ts';
 import { me } from '../state/me.ts';
 import { ladder } from '../state/ladder.ts';
@@ -100,6 +101,22 @@ export default class Workbench extends Component {
     // `session.load()` too, so a boot that restores a stored key no longer
     // depends on winning a race against the constructor's own refresh.
     session.onChange(() => this.reevaluate());
+
+    // The background worker finishing is a fourth caller of the same question
+    // (CCEXT-96). Before this the worker told the OS and nothing else, so with
+    // the tab sitting still the panel held "Parsing and scoring it." while the
+    // notification for the completed score was already on screen.
+    //
+    // `reevaluate()` rather than a targeted refresh, and deliberately: the
+    // announcement means "the api has something new to say about this page",
+    // which is the same thing navigation and connecting mean. Routing all four
+    // through one method is what stopped them drifting last time.
+    //
+    // No page-scoping needed HERE — `reevaluate()` re-derives from whatever
+    // page the panel is currently showing, so an announcement about a tab the
+    // user has left costs a redundant lookup and nothing else. The card that
+    // renders per-page prose does its own url check (send-card.gts).
+    worker.onAnnounce(() => this.reevaluate());
 
     page.onChange(() => {
       void access.refresh();

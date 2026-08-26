@@ -10,6 +10,8 @@ import type { PageHints } from '../state/hints.ts';
 import { errorLog } from '../state/errors.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
+import { worker } from '../state/worker.ts';
+import type { WorkerAnnouncement } from '../domain/messages.ts';
 import { planSend } from '../domain/send-gate.ts';
 
 /**
@@ -30,7 +32,24 @@ const MIN_USEFUL_CHARS = 400;
 
 export default class SendCard extends Component {
   @tracked status = '';
-  @tracked kind: 'idle' | 'busy' | 'ok' | 'error' = 'idle';
+  /**
+   * `watching` is the state this card spent eleven versions without, and its
+   * absence was visible: `ok` was doing double duty as "the request succeeded"
+   * and "we are done", and only the first was ever true. The POST returns 202
+   * — parse, extraction and scoring all happen afterwards — so the button
+   * re-enabled and read "Send this page" again while the line beneath it said
+   * "Parsing and scoring it." Doug, 2026-08-25: *"when i send the page, I want
+   * the button to reflect that it's working."* The two disagreed and the
+   * button was the louder of them (CCEXT-97).
+   *
+   *   busy      local capture plus the HTTP round trip. We are doing the work.
+   *   watching  accepted; the server is working and the background worker is
+   *             watching for us. Nothing to do but wait.
+   *   ok        genuinely finished, one way or another.
+   */
+  @tracked kind: 'idle' | 'busy' | 'watching' | 'ok' | 'error' = 'idle';
+  /** Which half of the server-side work is outstanding, for the label. */
+  @tracked watchPhase: 'parsing' | 'scoring' = 'parsing';
   @tracked scrapeId: string | null = null;
   @tracked autoScore = true;
   /**
@@ -56,6 +75,12 @@ export default class SendCard extends Component {
   constructor(owner: Owner, args: object) {
     super(owner, args);
     page.onChange(() => this.resetForNewPage());
+    // The worker's return path (CCEXT-96). This is also the ONLY way out of
+    // `watching`, which is why every terminal exit in background.ts announces
+    // — including the ones that give up. The `page.onChange` reset above is
+    // the backstop for an announcement that never arrives at all (a panel
+    // opened after the work finished, a worker that died with its alarm).
+    worker.onAnnounce((a) => this.applyAnnouncement(a));
   }
 
   get page(): typeof page {
@@ -66,8 +91,19 @@ export default class SendCard extends Component {
     return session;
   }
 
+  /**
+   * "Do not click me again." Covers `watching` as well as `busy`, so the
+   * button stays disabled for the whole of the work rather than for the
+   * fraction of it that happens over HTTP.
+   */
   get isBusy(): boolean {
-    return this.kind === 'busy';
+    return this.kind === 'busy' || this.kind === 'watching';
+  }
+
+  /** What the disabled button says it is doing. Never shown when idle. */
+  get busyLabel(): string {
+    if (this.kind === 'busy') return 'Sending…';
+    return this.watchPhase === 'scoring' ? 'Scoring…' : 'Parsing…';
   }
 
   /** Sending a Career Caddy page to Career Caddy is never what you meant. */
@@ -124,7 +160,7 @@ export default class SendCard extends Component {
   }
 
   get sendLabel(): string {
-    if (this.isBusy) return 'Sending…';
+    if (this.isBusy) return this.busyLabel;
     return this.isResend ? 'Resend to complete' : 'Send this page';
   }
 
@@ -169,8 +205,59 @@ export default class SendCard extends Component {
     this.ticket++;
     this.status = '';
     this.kind = 'idle';
+    this.watchPhase = 'parsing';
     this.scrapeId = null;
     this.closedEvidence = null;
+  }
+
+  /**
+   * The worker finished (or stopped) — react, if it was talking about us.
+   *
+   * TWO GUARDS, AND BOTH ARE LOAD-BEARING.
+   *
+   * The url check is CCEXT-33: the panel outlives pages, so an announcement
+   * about the Toptal posting arrives just as happily while the user is looking
+   * at Greenhouse. Writing "Added to Career Caddy." under a page that was
+   * never sent is precisely the class of bug the ticket exists for.
+   *
+   * The `watching` check keeps this from resurrecting a card that has already
+   * moved on. A re-send starts a second watch, and the first watch's late
+   * announcement must not overwrite the second one's status — the ticket
+   * counter guards the network, and this guards the message channel.
+   */
+  private applyAnnouncement(a: WorkerAnnouncement): void {
+    if (a.url !== page.url) return;
+    if (this.kind !== 'watching') return;
+
+    if (a.phase === 'scoring') {
+      // Still watching, just further along. The button label follows.
+      this.watchPhase = 'scoring';
+      this.status = 'Added to Career Caddy. Scoring it…';
+      return;
+    }
+
+    if (a.phase === 'failed') {
+      this.fail("Career Caddy couldn't parse that posting. Try re-sending, or open the posting's own page.");
+      return;
+    }
+
+    if (a.phase === 'gave-up') {
+      // NOT an error. The work may well still be running server-side; the
+      // worker just stopped watching it. Saying "failed" here would be a
+      // claim we cannot support, and the honest version is also the useful
+      // one — it tells the user where to look.
+      this.kind = 'ok';
+      this.status = 'Still working on it. Check Career Caddy in a minute.';
+      return;
+    }
+
+    // done. The tracked card is about to take over — `trackedPost.refresh()`
+    // is running in the workbench off the same announcement. Keep a short
+    // status rather than clearing it, because that refresh can legitimately
+    // come back empty (a post whose stored link does not match this page,
+    // CC-247) and an empty card would then look like nothing happened.
+    this.kind = 'ok';
+    this.status = 'Added to Career Caddy.';
   }
 
   /**
@@ -286,7 +373,7 @@ export default class SendCard extends Component {
     }
 
     this.scrapeId = String(resp.data?.data?.id ?? resp.data?.id ?? '') || null;
-    this.kind = 'ok';
+    this.watchPhase = 'parsing';
 
     // Hand the scrape to the worker to watch.
     //
@@ -298,9 +385,18 @@ export default class SendCard extends Component {
     //
     // The credential deliberately does NOT ride along; the worker reads it
     // from the same storage this panel wrote it to.
+    //
+    // AWAITED, AND ITS RESULT DECIDES THE STATE. This used to be fire-and-
+    // forget, which was fine when the card went straight to `ok` — a lost
+    // handoff cost a notification nobody was waiting for. It is not fine now:
+    // `watching` disables the button and the ONLY thing that lifts it is an
+    // announcement from this watch. Assume the handoff worked and a rejected
+    // sendMessage leaves a dead control until the user navigates away. So the
+    // card only enters `watching` once the worker has actually taken the job.
+    let watched = false;
     if (this.scrapeId) {
       try {
-        void chrome.runtime.sendMessage({
+        const ack = (await chrome.runtime.sendMessage({
           type: 'cc-watch-scrape',
           scrapeId: this.scrapeId,
           url: payload.url,
@@ -309,11 +405,23 @@ export default class SendCard extends Component {
           // the post exists, which is also what makes it survive the panel
           // being closed.
           autoScore: this.autoScore,
-        });
+        })) as { watching?: boolean } | undefined;
+        // The worker acks synchronously (background.ts). Require the ack
+        // rather than treating "did not throw" as success: a resolved-with-
+        // undefined is what you get when nothing handled the message, and
+        // that is precisely the case this guard exists for.
+        watched = ack?.watching === true;
       } catch {
         /* no worker (e.g. rendered outside an extension context) */
       }
     }
+    if (stale()) return;
+
+    // 202, not 200. The server has ACCEPTED the page; parse, extraction and
+    // scoring are all ahead of us, and `watching` says so rather than letting
+    // `ok` mean both "the request succeeded" and "we are done" (CCEXT-97).
+    // Without a watch there is nothing to wait FOR here, so `ok` is honest.
+    this.kind = watched ? 'watching' : 'ok';
     const from = payload.frames > 1 ? ` from ${payload.frames} frames` : '';
     // Naming the path matters while the fast path is new: "browser tier" is
     // the one that can hang on an auth-walled page, and seeing it in the
@@ -353,7 +461,7 @@ export default class SendCard extends Component {
           class="send__btn send__btn--quiet"
           disabled={{this.isBusy}}
           {{on "click" this.send}}
-        >{{if this.isBusy "Sending…" "Re-send to refresh"}}</button>
+        >{{if this.isBusy this.busyLabel "Re-send to refresh"}}</button>
         {{#if this.status}}
           <p class="send__status send__status--{{this.kind}}">{{this.status}}</p>
         {{/if}}

@@ -389,6 +389,10 @@ h1 {
 .send__status--error { color: var(--error); }
 .send__status--ok { color: var(--success); }
 .send__status--busy { color: var(--text-muted); }
+/* Same muted treatment as `busy`: both mean "in progress", and colouring them
+   differently would suggest the wait changes character when the work crosses
+   from our side of the wire to the server's. It does not — CCEXT-97. */
+.send__status--watching { color: var(--text-muted); }
 .send__link {
   display: inline-block; margin-top: 6px; font-size: 11px; color: var(--accent-500);
 }

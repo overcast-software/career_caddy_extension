@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseGolfMessage } from '../messages.ts';
+import { parseGolfMessage, parseWorkerAnnouncement } from '../messages.ts';
 
 describe('parseGolfMessage', () => {
   it('accepts a well-formed select', () => {
@@ -41,5 +41,56 @@ describe('parseGolfMessage', () => {
     expect(parseGolfMessage({ type: 'cc-golf-select', token: 'never-scanned' })).toEqual({
       token: 'never-scanned',
     });
+  });
+});
+
+describe('parseWorkerAnnouncement', () => {
+  const url = 'https://talent.toptal.com/portal/job/abc';
+
+  it('accepts each of the four phases', () => {
+    for (const phase of ['scoring', 'done', 'failed', 'gave-up'] as const) {
+      expect(
+        parseWorkerAnnouncement({ type: 'cc-scrape-progress', url, phase, jobPostId: 'GRUakIUbqm' }),
+      ).toEqual({ url, phase, jobPostId: 'GRUakIUbqm' });
+    }
+  });
+
+  it('rejects junk and the wrong type', () => {
+    for (const raw of [null, undefined, 0, '', [], {}, { type: 'cc-golf-select', phase: 'done' }]) {
+      expect(parseWorkerAnnouncement(raw)).toBeNull();
+    }
+  });
+
+  it('rejects a phase it does not know', () => {
+    // The whole point of the allow-list. A renamed phase must fail here rather
+    // than reach the send card as an unhandled string and fall through to the
+    // `done` branch, which would clear a watch that is still running.
+    expect(
+      parseWorkerAnnouncement({ type: 'cc-scrape-progress', url, phase: 'parsing' }),
+    ).toBeNull();
+    expect(parseWorkerAnnouncement({ type: 'cc-scrape-progress', url, phase: 42 })).toBeNull();
+    expect(parseWorkerAnnouncement({ type: 'cc-scrape-progress', url })).toBeNull();
+  });
+
+  it('normalises a missing url to the empty string rather than refusing', () => {
+    // A watch whose origin url was never recorded still has something worth
+    // saying. '' matches no real page, so the page-scoped listener ignores it
+    // while the workbench's page-agnostic one still re-derives.
+    expect(parseWorkerAnnouncement({ type: 'cc-scrape-progress', phase: 'done' })).toEqual({
+      url: '',
+      phase: 'done',
+      jobPostId: null,
+    });
+  });
+
+  it('normalises a missing or empty jobPostId to null', () => {
+    // `failed` and `gave-up` genuinely have no post, and '' must not survive
+    // into a URL builder as `/job-posts//`.
+    expect(
+      parseWorkerAnnouncement({ type: 'cc-scrape-progress', url, phase: 'failed', jobPostId: '' }),
+    ).toEqual({ url, phase: 'failed', jobPostId: null });
+    expect(
+      parseWorkerAnnouncement({ type: 'cc-scrape-progress', url, phase: 'gave-up', jobPostId: 7 }),
+    ).toEqual({ url, phase: 'gave-up', jobPostId: null });
   });
 });
