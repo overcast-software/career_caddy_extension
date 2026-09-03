@@ -1,7 +1,8 @@
 import { tracked } from '@glimmer/tracking';
-import { lookupByLink, searchPosts } from '../data/posts.ts';
+import { lookupByLink, searchPosts, setApplyUrl } from '../data/posts.ts';
 import { classifyUrl } from '../domain/url-policy.ts';
 import type { JobPost } from '../domain/job-post.ts';
+import { isAuthWall, wouldReplaceApplyUrl } from '../domain/job-post.ts';
 import {
   bareHost,
   collectIdTokens,
@@ -241,16 +242,69 @@ class LadderRunner {
     }
   }
 
-  /** Accept the offer: adopt it as this page's post. */
+  /** Accept the offer: adopt it as this page's post, and tell the server. */
   accept(): void {
     if (!this.found) return;
+    const post = this.found;
+    const url = page.url;
     // The stash exists to reconnect a tracked application to its apply page.
     // Once you have confirmed the connection, its job is done — leaving the
     // entry behind would keep re-offering a post already adopted here, and
     // would still be doing it on the next unrelated job at the same ATS.
-    void clearStashForPost(this.found.id);
-    trackedPost.adopt(this.found);
+    void clearStashForPost(post.id);
+    trackedPost.adopt(post);
+    // Fire-and-forget, exactly like clearStashForPost above: the local
+    // adoption is what the user sees, and it must not wait on a round trip.
+    void this.persistAdoption(post, url);
     this.reset();
+  }
+
+  /**
+   * Persist "this page belongs to that post" as the post's apply_url.
+   *
+   * A human has just looked at a page and confirmed which post it belongs to.
+   * That is the highest-quality identity signal this system can obtain — and
+   * until now it went only into `chrome.storage.local` via trackedPost.adopt,
+   * under a 7-day TTL, and expired without ever reaching the server. The link
+   * picker, which is the SAME assertion made through a different button,
+   * has always persisted it (link-picker.ts). This closes that asymmetry.
+   *
+   * `apply_url` is the right home: it is already what the picker writes, and
+   * the api reads it as a dedupe signal (find_apply_url_matches, and the
+   * `apply_hint` duplicate-candidate signal). So a human's answer improves the
+   * server's future PROPOSALS without making any write path guess more.
+   *
+   * FILL, NEVER REPLACE — for confident and tentative offers alike.
+   * `wouldReplaceApplyUrl` is the only predicate standing between this and
+   * destroying a choice someone already made, and an apply URL is often the
+   * only record of where an application actually went. Replacing one
+   * deliberately is the link picker's job, where a two-click confirm and a
+   * human reading the page already exist; duplicating that flow here would be
+   * a second way to do the same destructive thing. The value is in the empty
+   * case anyway — see apply-backfill.ts, which measured 3 of the 100 most
+   * recent posts as having an apply_url at all.
+   */
+  private async persistAdoption(post: JobPost, url: string): Promise<void> {
+    if (!session.apiKey || !url) return;
+    // Never record a sign-in page as where an application goes. Same guard,
+    // same reason as apply-backfill: LinkedIn bounces a logged-out visitor to
+    // a wall, and posts in the library already carry captured walls as their
+    // apply_url. Accepting an offer is a click on an OFFER, not on the URL —
+    // the human is confirming WHICH POST, not vouching for the address bar.
+    if (isAuthWall(url)) return;
+    if (wouldReplaceApplyUrl(post, url)) return;
+
+    const ok = await setApplyUrl(session.apiKey, post.id, url);
+    if (!ok) return;
+
+    // Reflect it locally so the panel agrees with the server without a
+    // refetch. A 403 is expected and normal — filter[link] returns cross-user
+    // posts and PATCH is staff-or-owner — which is why setApplyUrl returns a
+    // boolean rather than throwing, and why a failure is silent here: the
+    // adoption above already succeeded and is what the user was promised.
+    if (trackedPost.post?.id === post.id) {
+      trackedPost.post = { ...post, applyUrl: url };
+    }
   }
 
   dismiss(): void {
