@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAuthWall, toJobPost, wouldReplaceApplyUrl } from '../job-post.ts';
+import { isAuthWall, jobPostFromIncluded, toJobPost, wouldReplaceApplyUrl } from '../job-post.ts';
 
 describe('toJobPost', () => {
   it('resolves the company from the sideload by (type, id)', () => {
@@ -62,6 +62,39 @@ describe('toJobPost', () => {
     );
     expect(post.company).toBeNull();
     expect(post.companyId).toBe('7');
+  });
+});
+
+describe('jobPostFromIncluded', () => {
+  it('preserves apply_url through the mapping', () => {
+    // The match-accept persist (state/match-app.ts) trusts this: its
+    // fill-never-replace guard reads applyUrl off the post this mapper built
+    // from the poll response. If the mapper dropped apply_url, the guard
+    // would see null and wave through an overwrite of a link the server
+    // already has.
+    const post = jobPostFromIncluded('5', [
+      {
+        id: '5',
+        type: 'job-post',
+        attributes: { title: 'SRE', apply_url: 'https://a.com/apply' },
+      },
+    ]);
+    expect(post?.applyUrl).toBe('https://a.com/apply');
+    expect(post && wouldReplaceApplyUrl(post, 'https://b.com/form')).toBe(true);
+  });
+
+  it('accepts the plural type name too', () => {
+    // Same serializer inconsistency as the company sideload above.
+    const post = jobPostFromIncluded('5', [
+      { id: '5', type: 'job-posts', attributes: { title: 'SRE' } },
+    ]);
+    expect(post?.title).toBe('SRE');
+  });
+
+  it('returns null when the include is missing, not a guessed post', () => {
+    expect(
+      jobPostFromIncluded('5', [{ id: '6', type: 'job-post', attributes: {} }]),
+    ).toBeNull();
   });
 });
 
