@@ -1,6 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 import { createMatchApplication, pollMatchApplication } from '../data/match-application.ts';
+import { setApplyUrl } from '../data/posts.ts';
 import type { JobPost } from '../domain/job-post.ts';
+import { isAuthWall, wouldReplaceApplyUrl } from '../domain/job-post.ts';
 import { errorLog } from './errors.ts';
 import { me } from './me.ts';
 import { page } from './page.ts';
@@ -193,11 +195,60 @@ class MatchAppRunner {
     }, POLL_INTERVAL_MS);
   }
 
-  /** Adopt the matched post as this page's. */
+  /** Adopt the matched post as this page's, and tell the server. */
   accept(): void {
     if (!this.found) return;
-    trackedPost.adopt(this.found);
+    const post = this.found;
+    const url = page.url;
+    trackedPost.adopt(post);
+    // Fire-and-forget: the local adoption is what the user sees, and it must
+    // not wait on a round trip.
+    void this.persistAdoption(post, url);
     this.reset();
+  }
+
+  /**
+   * Persist "this page belongs to that post" as the post's apply_url.
+   *
+   * The same gap the ladder's persistAdoption closed (ladder.ts), closed the
+   * same way. A human has just looked at this page and confirmed which post
+   * it belongs to — the highest-quality identity signal this system can
+   * obtain — and until now that answer went only into `chrome.storage.local`
+   * via trackedPost.adopt, under a 7-day TTL, and expired without ever
+   * reaching the server. That the CANDIDATE came from the server's matcher
+   * changes nothing about whose assertion the click is: the matcher proposed,
+   * the human confirmed.
+   *
+   * `apply_url` is the right home — it is what the link picker writes for the
+   * same assertion, and the api reads it as a dedupe signal
+   * (find_apply_url_matches, and the `apply_hint` duplicate-candidate
+   * signal). If anything it fits BETTER here than in the ladder: this page is
+   * one you told Career Caddy you applied on (`tracking_url` on the
+   * application it just created), so recording it as where applications go is
+   * barely an inference at all.
+   *
+   * FILL, NEVER REPLACE, and never a login wall. Both guards are shared with
+   * the ladder and unit-tested in domain/: `wouldReplaceApplyUrl` because an
+   * apply URL is often the only record of where an application actually went
+   * and replacing one deliberately is the link picker's job; `isAuthWall`
+   * because this is a silent path, and posts in the library already carry
+   * captured LinkedIn walls from something that recorded one.
+   */
+  private async persistAdoption(post: JobPost, url: string): Promise<void> {
+    if (!session.apiKey || !url) return;
+    if (isAuthWall(url)) return;
+    if (wouldReplaceApplyUrl(post, url)) return;
+
+    const ok = await setApplyUrl(session.apiKey, post.id, url);
+    if (!ok) return;
+
+    // Reflect it locally so the panel agrees with the server without a
+    // refetch. Failure is silent by design — setApplyUrl returns a boolean
+    // rather than throwing, and the adoption above already succeeded and is
+    // what the user was promised, so there is nothing to walk back.
+    if (trackedPost.post?.id === post.id) {
+      trackedPost.post = { ...post, applyUrl: url };
+    }
   }
 
   // --- stash ------------------------------------------------------------
