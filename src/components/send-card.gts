@@ -13,6 +13,7 @@ import { trackedPost } from '../state/tracked.ts';
 import { worker } from '../state/worker.ts';
 import type { WorkerAnnouncement } from '../domain/messages.ts';
 import { planSend } from '../domain/send-gate.ts';
+import { sendToWorker } from '../platform/runtime.ts';
 
 /**
  * "Send this page" — the extension's most-used action.
@@ -395,25 +396,22 @@ export default class SendCard extends Component {
     // card only enters `watching` once the worker has actually taken the job.
     let watched = false;
     if (this.scrapeId) {
-      try {
-        const ack = (await chrome.runtime.sendMessage({
-          type: 'cc-watch-scrape',
-          scrapeId: this.scrapeId,
-          url: payload.url,
-          // The fast path has no server-side auto_score — that flag only
-          // exists on /scrapes/from-text/. The worker starts the score once
-          // the post exists, which is also what makes it survive the panel
-          // being closed.
-          autoScore: this.autoScore,
-        })) as { watching?: boolean } | undefined;
-        // The worker acks synchronously (background.ts). Require the ack
-        // rather than treating "did not throw" as success: a resolved-with-
-        // undefined is what you get when nothing handled the message, and
-        // that is precisely the case this guard exists for.
-        watched = ack?.watching === true;
-      } catch {
-        /* no worker (e.g. rendered outside an extension context) */
-      }
+      const ack = await sendToWorker<{ watching?: boolean }>({
+        type: 'cc-watch-scrape',
+        scrapeId: this.scrapeId,
+        url: payload.url,
+        // The fast path has no server-side auto_score — that flag only
+        // exists on /scrapes/from-text/. The worker starts the score once
+        // the post exists, which is also what makes it survive the panel
+        // being closed.
+        autoScore: this.autoScore,
+      });
+      // The worker acks synchronously (background.ts). Require the ack
+      // rather than treating "did not throw" as success: a resolved-with-
+      // undefined is what you get when nothing handled the message — and
+      // what `sendToWorker` returns when there is no worker to hear it at
+      // all. That is precisely the case this guard exists for.
+      watched = ack?.watching === true;
     }
     if (stale()) return;
 

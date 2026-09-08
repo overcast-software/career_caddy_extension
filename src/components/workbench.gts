@@ -18,6 +18,7 @@ import ApplicationCard from './application-card.gts';
 import LadderOffer from './ladder-offer.gts';
 import MatchAppCard from './match-app-card.gts';
 import AccessGate from './access-gate.gts';
+import { manifestVersion } from '../platform/runtime.ts';
 import { visibleSections } from '../domain/sections.ts';
 import type { SectionSpec } from '../domain/sections.ts';
 import { layout } from '../state/layout.ts';
@@ -217,11 +218,7 @@ export default class Workbench extends Component {
   }
 
   private get manifestVersion(): string {
-    try {
-      return chrome.runtime.getManifest().version;
-    } catch {
-      return '?';
-    }
+    return manifestVersion();
   }
 
   /**
