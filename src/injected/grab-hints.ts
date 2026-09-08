@@ -32,7 +32,18 @@ export interface RawHints {
   structuredPrefill: Record<string, string>;
   /** Which configured fields actually matched — for the staff validator. */
   matched: string[];
+  /** Configured, selector ran, nothing on this page. A STALE selector. */
   missed: string[];
+  /**
+   * Configured, but `querySelector` THREW — the selector is not valid CSS3.
+   *
+   * Kept apart from `missed` because the two want opposite fixes and look
+   * identical when merged. The known cause is a Playwright selector pasted
+   * into a profile from a sharpen pass: `:has-text()` is not CSS, so the
+   * browser rejects the whole string. "No match on this page" sends a staff
+   * user hunting the DOM for a selector that could never have run.
+   */
+  invalid: string[];
   /** The phrase that matched, verbatim, or null. Evidence, not a boolean. */
   closedEvidence: string | null;
 }
@@ -45,6 +56,7 @@ export function ccGrabHints(selectors: HintSelectors): RawHints {
     structuredPrefill: {},
     matched: [],
     missed: [],
+    invalid: [],
     closedEvidence: null,
   };
 
@@ -113,7 +125,8 @@ export function ccGrabHints(selectors: HintSelectors): RawHints {
         out.missed.push(field);
       }
     } catch {
-      out.missed.push(field);
+      // Not a miss: the selector never ran. See `invalid` on RawHints.
+      out.invalid.push(field);
     }
   }
 

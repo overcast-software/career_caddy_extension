@@ -20,16 +20,24 @@ This is the checklist instead. Source of truth is frontend commit `95aad96^`
 | | Count | |
 |---|---|---|
 | DOM plumbing — genuinely deleted by Glimmer | 55 | `show*`/`hide*`/`render*`/`reset*Card`/`setStatus` — `{{#if}}` and `{{#each}}` replace these outright |
-| Ported | 94 | |
-| Dropped with a reason | 2 | both in the answer desk; see below |
-| **Not yet ported** | **20** | |
+| Ported | 112 | |
+| Dropped with a reason | 3 | two in the answer desk, one in staff; see below |
+| **Deliberately deferred** | **1** | `importPaletteFromActiveTab` |
 
-Excluding the 55 the framework deletes, that is **94 of 116 real functions
-resolved — 81%.**
+Excluding the 55 the framework deletes, that is **115 of 116 real functions
+resolved — 99%**, with one deferred by choice and nothing unaccounted for.
 
-The remaining 20 are spread across the sections below and counted per-section
-there — the ✅ marks are the source of this table, so recount them rather than
-trusting the number.
+The ✅ marks are the source of this table, so recount them rather than trusting
+the number.
+
+> **Recounted 2026-09-07.** This table previously read "94 ported / 20 not yet
+> ported", and the ladder section below carried a 22-name "Remaining" list that
+> had never been pruned as items were ticked — ten of those names were marked
+> ✅ in the same section that listed them as outstanding. Verified against the
+> source rather than the doc: `state/match-app.ts`, `data/match-application.ts`,
+> `components/match-app-card.gts`, `state/application.ts` and `state/viewed.ts`
+> all exist and cover that cluster. A stale checklist is worse than none — it
+> is the thing this file was written to replace.
 
 ## Not yet ported, by subsystem
 
@@ -126,7 +134,7 @@ tests are green; nothing here has been exercised against a real Greenhouse
 form in a loaded extension. The acceptance criteria in CCEXT-45 are a
 human-at-the-browser check and remain open.
 
-### Signal ladder / match application — 22 functions (CCEXT-50, IN PROGRESS)
+### Signal ladder / match application — 22 functions (CCEXT-50, **DONE**)
 
 **Done — pure layer, `domain/ladder.ts`, 33 tests:**
 `bareHost` ✅ `originOf` ✅ `collectIdTokens` ✅ `pathPrefixScore` ✅
@@ -150,16 +158,30 @@ that triage lands. `pickFromTrail` is written and tested; the seam returns [].
 Bounded and honest: T6 never fires, so the ladder says "no match" where it
 would have guessed. Fewer answers, no wrong ones.
 
-**Remaining:**
-`runSignalLadder` `grabLadderSignals` `maybeOfferFromLadder`
-`renderLadderOffer` `confirmLadderOffer` `postMatchApplication`
-`pollMatchApplicationOnce` `pollMatchAppOnce` `armMatchAppBackground`
-`startMatchAppPolling` `stopMatchAppPolling` `maybeResumeMatchApplication`
-`markMatchAppStashResult` `renderMatchResult` `collectIdTokens`
-`pathPrefixScore` `hostAgrees` `titlesMatch` `normalizeTitle`
-`buildJpFromIncluded` `refreshApplicationState` `rememberApplicationState`
+**Done — the match-application half** (VERIFIED 2026-09-07 by reading the
+modules, not by trusting this list, which had gone stale):
 
-The largest single gap, and it was missed entirely when scoping. This is how
+`postMatchApplication` ✅ (`data/match-application.ts` `createMatchApplication`)
+`pollMatchApplicationOnce` / `pollMatchAppOnce` ✅ (`pollMatchApplication`)
+`armMatchAppBackground` `startMatchAppPolling` `stopMatchAppPolling`
+`markMatchAppStashResult` ✅ — all four collapse into `MatchAppRunner`'s
+lifecycle (`state/match-app.ts`): a class with `reset()` does not need a
+separate arm/start/stop trio, and the legacy's three were bookkeeping around
+the absence of one.
+`maybeResumeMatchApplication` ✅ (as `resume()`) `renderMatchResult` ✅
+(`components/match-app-card.gts`) `refreshApplicationState` ✅ (as
+`ApplicationState.refreshFor`) `rememberApplicationState` ✅ (its two cached
+outcomes, keyed by POST id rather than by URL — `state/application.ts`)
+
+`buildJpFromIncluded` ✅ — **merged, not ported twice.** It is the same mapper
+as the send path's, so it became one `domain/job-post.ts`; the comment there
+records why. Two JobPost mappers that could disagree about the same row is a
+mistake this repo has already made once.
+
+**T6 is unblocked.** It was a seam returning `[]` pending CCEXT-52; that
+triage landed `state/viewed.ts`, so `pickFromTrail` now has its data source.
+
+This was the largest single gap, and it was missed entirely when scoping. It is how
 the legacy answers "which job post does this application form belong to?" when
 the URL does not match anything — evidence scoring across id tokens, path
 prefixes, host agreement and title similarity. CCEXT-32 replaced a
@@ -220,7 +242,7 @@ Notices you followed an apply link from a known post to an ATS, and offers to
 backfill the post's `apply_url` with where you actually landed. Explains why
 only 3 of the 100 most recent posts have an `apply_url` at all.
 
-### Staff / proposed post / dev-hints — 10 functions (CCEXT-49, **PARTIAL**)
+### Staff / proposed post / dev-hints — 10 functions (CCEXT-49, **DONE**)
 
 **Done:** `populateDevHints` ✅ + `_setDevHint` ✅ + `profileLookupNote` ✅ —
 `components/dev-hints.gts` and `domain/profile-note.ts` (5 tests).
@@ -261,7 +283,42 @@ live frontend does not poll it"*. Porting the poll loop would have queried a
 dead endpoint forever and rendered the silence as progress. Found by reading
 the endpoint, which is the whole argument for `CONTRACTS.md`.
 
-**Remaining:** `renderProposedPost` `createFromProposed` `handleRecheck`
+**Done:** `renderProposedPost` ✅ — as `domain/proposed-post.ts` (10 tests) +
+the validator block in `components/dev-hints.gts`.
+
+Its preview half was already covered by DevHints. The half with no equivalent
+was the **per-field validation list**, and porting it needed no new page read
+and no api change — only reading what was already being thrown away:
+
+- `ccGrabHints` has always returned `matched` / `missed`, with a comment
+  saying they are "for the staff validator". `collectHints` dropped both.
+- The api has always returned `readiness` as the whole
+  `{known_good, tier, reasons}` struct, and `scrapes.py:2272` says the
+  breakdown exists "so the staff extension panel can show WHY". The panel
+  parsed two thirds of it.
+
+**A fourth verdict was added, and it is the one that earns the module.** The
+legacy had ✓ / ✗ / — plus an `invalid` flag it never populated. `ccGrabHints`
+was collapsing a selector that THREW into `missed`, so "not valid CSS" and
+"stale selector" rendered identically — and they want opposite fixes. The
+known cause is a Playwright selector reaching a profile from a sharpen pass
+(`:has-text()` is not CSS3), which `arch-scrape-profiles-and-selector-engine`
+records as GOTCHA_1. Reported as "no match on this page" it sends a staff user
+hunting a DOM for a selector the browser refused to run.
+
+**Done:** `handleRecheck` ✅ — as `DevHints.read()` for the hints half. The
+legacy button re-ran `resolveOpenScreen`, i.e. the whole tracked-screen
+resolution; that half is now event-driven rather than a control, firing on
+boot, navigation, session connect (CCEXT-92) and worker announcement
+(CCEXT-96). A manual re-resolve has no remaining caller. Worth keeping the
+hints button, because `profileLookupNote` can say "re-check after the rate
+limit clears" and something has to make that possible.
+
+**Dropped, with a reason:**
+
+| Function | Verdict | Reason |
+|---|---|---|
+| `createFromProposed` | **DROP (superseded)** | It is `planSend`'s extension-direct arm, already. Same endpoint (`POST /api/v1/scrapes/`), same `source_mode`, same `captured_payload` shape, same `extraction_hints`, same CC-122 omit-don't-blank rule for title/company. Porting it would be a second copy of one request. **And its gate would re-introduce a fixed bug:** `canCreate = title && company` is exactly the `useDirectPost = curatedComplete` test that CC-176 removed, because it routed auth-walled hosts to a browser runner that can never load them — the sites that most need the extension were the ones it handed away. `send-gate.ts`'s header carries the full argument. Title and company are an optimisation, not a gate. |
 
 **Original notes:**
 `renderProposedPost` `createFromProposed` `populateDevHints` `_setDevHint`

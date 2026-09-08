@@ -25,6 +25,16 @@ export interface SelectorBundle {
   knownGood: boolean;
   tier: string | null;
   /**
+   * WHY this host is not known-good, one clause per reason.
+   *
+   * The api has always sent this — `readiness` is the whole
+   * `{known_good, tier, reasons}` struct (scrapes.py:2313), and its comment
+   * says the breakdown exists "so the staff extension panel can show WHY".
+   * The panel had been parsing two thirds of that struct and dropping the
+   * third. No api change was needed, only reading what was already there.
+   */
+  reasons: string[];
+  /**
    * The ScrapeProfile's own id, which this endpoint already returns as
    * `data.id`. Carrying it here is what makes `resolveProfileId` free — the
    * staff sharpen action needs it and would otherwise re-request the profile
@@ -67,6 +77,7 @@ const BAKED: Record<string, SelectorBundle> = {
     jobDataSelectors: {},
     knownGood: false,
     tier: null,
+    reasons: [],
     profileId: null,
   },
 };
@@ -138,7 +149,12 @@ interface SelectorAttrs {
   job_data_selectors?: Record<string, string> | null;
   /** CANONICAL location as of the api's meta/attributes fix. */
   is_known_good?: boolean;
-  readiness?: { known_good?: boolean; tier?: string | null } | null;
+  readiness?: {
+    known_good?: boolean;
+    tier?: string | null;
+    /** Per-clause breakdown of WHY, empty when known-good. */
+    reasons?: string[] | null;
+  } | null;
 }
 
 export async function loadSelectors(
@@ -209,6 +225,7 @@ export async function loadSelectors(
     // deprecated top-level copies are going away with the 2.x cutover.
     knownGood: attrs.is_known_good === true || attrs.readiness?.known_good === true,
     tier: attrs.readiness?.tier ?? null,
+    reasons: Array.isArray(attrs.readiness?.reasons) ? attrs.readiness.reasons : [],
     profileId: resp.data?.data?.id != null ? String(resp.data.data.id) : null,
   };
 
