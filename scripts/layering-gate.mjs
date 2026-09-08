@@ -6,7 +6,10 @@
 //   injected/   the executeScript boundary. Serialized into the user's page,
 //               so it may import TYPES only — a value import becomes a
 //               module-scope reference that does not exist there.
-//   platform/   the only place chrome.* / browser.* is named.
+//   platform/   where a COMPONENT's browser access is wrapped. Not "the only
+//               place chrome.* is named" — state/ owns storage and
+//               background.ts IS the worker, so both name it by definition.
+//               Claiming otherwise would be a seam nothing enforces.
 //   domain/     pure. No chrome, no DOM, no fetch. This is what makes it
 //               testable, and vitest.config.mjs depends on it staying true.
 //   data/       the only place fetch / RequestManager appears.
@@ -31,6 +34,22 @@ async function* files(dir, ext = ['.ts', '.gts']) {
     else if (ext.some((e) => entry.name.endsWith(e))) yield path;
   }
 }
+
+/**
+ * The one component allowed to name chrome.* directly.
+ *
+ * `permission-probe.gts` is a PHASE 0 DIAGNOSTIC whose whole job is reporting
+ * raw platform state — its header records that three separate hypotheses about
+ * why Chrome refuses page access "all looked identical from the outside", and
+ * each cost a build/test cycle. A platform/ wrapper exists precisely to
+ * normalise failures into ordinary return values, which would swallow the
+ * distinctions this component is built to surface.
+ *
+ * It deletes itself when the permission model settles, and this entry goes
+ * with it. If a SECOND name ever appears here, the exception has become a
+ * habit and the seam is the thing to fix.
+ */
+const COMPONENT_CHROME_OK = new Set(['components/permission-probe.gts']);
 
 const violations = [];
 const note = (file, line, rule, detail) =>
@@ -86,11 +105,18 @@ for await (const file of files(root)) {
     }
 
     // 4. components/ render. They do not fetch, store, or call browser APIs —
-    //    those belong to state/ and data/, which components read through.
-    if (rel.startsWith('components/') && !isComment) {
+    //    those belong to state/, data/ and platform/, which components read
+    //    through.
+    //
+    //    This used to check `chrome.storage` only, while the header above
+    //    claimed components never touch `chrome.*` at all. Three of them did.
+    //    A gate that asserts more than it enforces is the defect CCEXT-49
+    //    named for the sharpen button — so the rule now matches the claim,
+    //    and the one genuine exception is written here rather than implied.
+    if (rel.startsWith('components/') && !isComment && !COMPONENT_CHROME_OK.has(rel)) {
       if (/\bfetch\s*\(/.test(text)) note(file, n, 'component calls fetch', text.trim());
-      if (/chrome\.storage/.test(text)) {
-        note(file, n, 'component touches storage', text.trim());
+      if (/\bchrome\.|globalThis\.browser/.test(text)) {
+        note(file, n, 'component touches chrome.* — wrap it in platform/', text.trim());
       }
     }
   });
