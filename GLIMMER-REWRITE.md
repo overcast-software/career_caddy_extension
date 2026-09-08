@@ -113,6 +113,31 @@ That gate is worth showing off in its own right — it is the concrete artifact 
 
 ## 4. Surfaces: popup stays, side panel is new
 
+> **SUPERSEDED 2026-09-07 — the title is now false. There is no popup.**
+>
+> This section's *reasoning* is what shipped and is why the panel exists; its
+> *conclusion* — keep a minimal popup for "send this page" — was reversed
+> during the build. A popup for Send and a panel for everything else made
+> "open the workbench" a toll booth in front of the feature, so the toolbar
+> icon now opens the panel directly and `manifest.mjs` declares **no
+> `default_popup`**. That absence is load-bearing on both browsers: declaring
+> one makes the icon open the popup and nothing else, and on Chrome it even
+> overrides `openPanelOnActionClick` so `action.onClicked` stops firing.
+>
+> So `popup.html` / `popup.ts` below, and the two-input Vite config in §5,
+> describe a build that does not exist. README's *"One surface, not two"* is
+> the current statement.
+>
+> The paragraph below about what the popup lifecycle cost is the *opposite* of
+> obsolete — it under-sold itself. The popup was doing correctness work for
+> free: page-scoped state reset by accident every time it died on blur. In a
+> panel each of those implicit resets became an explicit obligation, and every
+> panel bug so far has been a missed one (send state leaking from one posting
+> onto another, an armed overwrite-confirm straddling a navigation). The rule
+> that came out of it: **each page-scoped module registers its OWN
+> `page.onChange` reset.** Centralising that knowledge in the workbench is how
+> one gets forgotten.
+
 **The popup is destroyed the moment it loses focus.** Look at what that has
 already cost: CCEXT-29 exists only because of it. `ccAnswerPending` /
 `ccAnswerResult` with TTLs and URL-scoping exist only because of it. The entire
@@ -347,6 +372,33 @@ with it (`CLAUDE.md`, `CONTRIBUTING.md`, `README.md`, the extension `README.md`)
 ---
 
 ## 9. Weekend sequence
+
+> **SUPERSEDED 2026-09-07 — this sequence is finished, and it did not run in
+> this order.** Kept as the plan of record; `PORTING.md` is what actually
+> happened, per function.
+>
+> Three deviations worth knowing, because each was a decision rather than a
+> slip:
+>
+> 1. **Step 1 never ran.** WarpDrive's bundle delta is still unmeasured, and
+>    `lib/api.ts` shipped instead so the extension could work. It has done the
+>    deduplication job since, so "keep it" is the default outcome — but it
+>    remains an open decision on CCEXT-46, not a closed one. Step 6 therefore
+>    never happened either.
+> 2. **`popup.html` (step 2) was dropped** — see the banner on §4.
+> 3. **Step 7 landed as a rebuild, not a re-land.** The parked dropdown/refine
+>    WIP could not be cherry-picked: it lived on a frontend branch against a
+>    tree that no longer exists. Only its `mode` parameter on
+>    `ccResolveFieldInPage` survived as a design, and the answer desk was built
+>    against the per-question model directly — building the singular version
+>    first would have meant building it twice.
+>
+> Step 4's instruction — port the injected page-interaction code **as-is**,
+> because it must survive `executeScript` serialization and cannot become a
+> component — held exactly, and is now enforced by `scripts/injected-gate.mjs`
+> against the built output.
+>
+> The `git subtree split` did happen: this repo is the result.
 
 Ordered so the riskiest unknown dies first and there is a working artifact at
 every stop.
