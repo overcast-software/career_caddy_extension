@@ -49,7 +49,10 @@ views and verified line by line. Every PENDING verdict below is resolved.
 
 Read alongside:
 - `architecture/arch-extension-direct-send-path-what-it-drops` in claudex, and
-  its mermaid diagram at `flowcharts/extension-direct-pipeline.md`
+  its mermaid diagram at `flowcharts/extension-direct-pipeline.md` — that path
+  is relative to the agent knowledge dir,
+  `~/.claude/projects/-home-oldbones-Network-syncthing-Projects-career-caddy/`,
+  NOT to this repo and not to a claudex namespace
 - `architecture/arch-ingest-pipeline-extension-source-of-truth` — the trust
   ladder and dedupe. Its own flowchart predates extension-direct; this file
   and the one above cover what it does not.
@@ -68,7 +71,7 @@ the browser tier. Verified by reading `views/scrapes.py:639-790`, not inferred:
 | `captured_payload.apply_url` | ~~**NEVER READ.**~~ **FIXED — api `16dc923` (#253 / BACK-131), merged 2026-08-23.** Was: `_parsed_job_data_from_payload` read exactly four keys — title, company, description, location — and the only occurrence of `apply_url` in the whole consume path was inside a *docstring*. Now stamped by `_stamp_apply_url` on the Tier-0 hit, and forwarded as `apply_url=` to `parse_scrape_job` on the Tier-0 miss, so both tiers write the same row. |
 | closed-posting detection | **DEAD.** `create_kwargs` (`:573-586`) never sets `job_content`, so `raw_source` is `""` in `process_evaluation` and BOTH legacy detection channels are guarded off (`job_post_extractor.py:726`, `:746`). |
 | completeness review | **NEVER RUNS.** `_consume_extension_direct_payload` calls `process_evaluation` directly (`:764`); the reviewer's only two call sites are `parse_scrape` and `persist_extraction`. |
-| `html` for selector discovery | **Never persisted** — breaks `inspect_scrape_html` and `find_selectors_for_text`. |
+| ~~`html` for selector discovery~~ | ~~**Never persisted**~~ **NOT A GAP — the extension never sends HTML. Corrected 2026-08-23.** `ccGrabPayload` (`src/injected/grab-payload.ts:21-34`) returns `{url, title, text}`, where `text` is `document.body.innerText`. No DOM crosses the wire, on this path or any other — see also `grab-hints.ts:125` and `grab-excerpt.ts:14`, all `innerText`. `find_selectors_for_text(html, text)` takes HTML as its first argument (`agents/lib/scrape_inspector.py:703`) and returns an empty result without it, so it and `inspect_scrape_html` are **structurally inapplicable** to extension scrapes rather than broken by the api. Selector discovery can only ever learn from a **browser-tier** scrape — which for an auth-walled host means the attended runner. The old wording implied the api was dropping something it receives; it receives nothing to drop, and no api change can close this. |
 | tier ladder, JSON-LD, screenshots, `ResolveApplyUrl`, `UpdateProfile` learning | **None of it.** Extension-direct scrapes never reach `status='hold'`, so `claim_next` never claims them and the graph never sees them. |
 | `scraped_at` | Null — the completion writes `save(update_fields=["status"])` (`:769`), bypassing the stamp in `pre_save_payload`. |
 
@@ -525,7 +528,7 @@ list.
 |---|---|---|---|
 | **0** | `POST /scrapes/` is staff-only; the gate fires before `source_mode` is known | **OPEN — product decision** | api (+ client message either way) |
 | **0b** | `create()` is not atomic; the row is briefly claimable at `'hold'` | **API GAP** | api |
-| **H** | Tier-0 drops `apply_url`, never writes `job_content`, skips CompletenessReviewer, persists no `html` | **PARTLY FIXED** — `apply_url` honoured (api `16dc923`). `job_content` is api #252, still open. CompletenessReviewer + `html` untouched. | api |
+| **H** | Tier-0 drops `apply_url`, never writes `job_content`, skips CompletenessReviewer | **PARTLY FIXED** — `apply_url` honoured (api `16dc923`). `job_content` is api #252, still open. CompletenessReviewer untouched. **The `html` clause was struck 2026-08-23**: the extension never sends HTML, so it was never an api gap (see the headline table). | api |
 | **1** | `canonical_link_hint` + `referrer_url` dropped on the fast path | ✅ **FIXED** — api `16dc923` (#253) | merged |
 | **2** | `auto_score` absent from `POST /scrapes/` | **API GAP, worked around** | decide owner first |
 | **3** | closed evidence detected, never sent, and undetectable server-side on this path | **API GAP** — depends on `job_content`, i.e. on api #252 | api |

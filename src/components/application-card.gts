@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
+import Icon from './icon.gts';
 import { FRONTEND_ORIGIN } from '../lib/api.ts';
 import { application } from '../state/application.ts';
 import { trackedPost } from '../state/tracked.ts';
@@ -88,7 +89,12 @@ export default class ApplicationCard extends Component {
     {{#if this.tracked.isKnown}}
       <div class="ac">
         <div class="ac__head">
-          <span class="ac__badge">Matched post</span>
+          {{! CCEXT-89: the same words and the same badge as <TrackedCard>.
+              This card used to say "Matched post" in accent purple while that
+              one said "In your library" in green — for THE SAME POST, one tab
+              apart. "Matched" also described how we found it, which is our
+              problem and not the reader's. }}
+          <span class="ac__badge">In your library</span>
           {{#if this.scoreLabel}}
             <span class="ac__score">{{this.scoreLabel}}</span>
           {{/if}}
@@ -112,12 +118,19 @@ export default class ApplicationCard extends Component {
         {{/if}}
 
         {{#if this.app.status}}
-          <p class="ac__status {{errClass this.app.state}}">{{this.app.status}}</p>
+          {{! CCEXT-89: "Already tracked" sat as bare prose between two links
+              and read as a DISABLED LINK — something that ought to be
+              clickable and is not. It is a status, so it is marked as one: a
+              check for the settled case, the error colour for the other. }}
+          <p class="ac__status {{errClass this.app.state}}">
+            {{#unless (isErr this.app.state)}}<Icon @name="check" />{{/unless}}
+            {{this.app.status}}
+          </p>
         {{/if}}
 
         {{#if this.appUrl}}
           <a class="ac__link" href={{this.appUrl}} target="_blank" rel="noopener">
-            Open application →
+            View application →
           </a>
         {{/if}}
       </div>
@@ -131,5 +144,9 @@ export default class ApplicationCard extends Component {
 }
 
 function errClass(state: string): string {
-  return state === 'error' ? 'is-err' : '';
+  return isErr(state) ? 'is-err' : '';
+}
+
+function isErr(state: string): boolean {
+  return state === 'error';
 }

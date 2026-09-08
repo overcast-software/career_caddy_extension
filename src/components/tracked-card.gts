@@ -76,13 +76,18 @@ export default class TrackedCard extends Component {
           <p class="tp__status">{{this.score.message}}</p>
         {{/if}}
 
+        {{! CCEXT-89: "View <thing> →" on every link out, across both cards.
+            This one said "Open in Career Caddy" and "See the score" while the
+            Applications card said "View job post" and "Open application" —
+            four phrasings for one kind of action, and two of them pointed at
+            the SAME url. Naming the destination beats naming the departure. }}
         <div class="tp__links">
           <a class="tp__link" href={{this.postUrl}} target="_blank" rel="noopener">
-            Open in Career Caddy →
+            View job post →
           </a>
           {{#if this.score.scoreId}}
             <a class="tp__link" href={{this.scoreUrl}} target="_blank" rel="noopener">
-              See the score →
+              View score →
             </a>
           {{/if}}
         </div>

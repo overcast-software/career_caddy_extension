@@ -19,6 +19,19 @@
  * ======================================================================= */
 
 :root {
+  /* CCEXT-63. The panel themes with a `data-theme` attribute, which the USER
+   * AGENT CANNOT SEE — so without this every browser-rendered control stays
+   * light while the panel is dark: the `<select>`'s popup list (which is drawn
+   * by the browser, not by us, and was at risk of white-on-white), the caret
+   * and selection in all three textareas, scrollbars on the question list and
+   * the error log, `::placeholder`, autofill.
+   *
+   * Two declarations retire the whole class, current and future, because the
+   * UA applies them to controls we never style. `theme.ts:61-66` always
+   * resolves `system` to an explicit attribute, so these two cases are
+   * exhaustive — there is no state where the panel is dark and the attribute
+   * is absent. */
+  color-scheme: light;
   --bg: #ffffff;
   --bg-soft: #f8fafc;
   --bg-input: #ffffff;
@@ -42,6 +55,8 @@
 }
 
 :root[data-theme='dark'] {
+  /* The other half of CCEXT-63 — see the note in `:root` above. */
+  color-scheme: dark;
   --bg: #0f172a;
   --bg-soft: #1e293b;
   --bg-input: #1e293b;
@@ -374,6 +389,10 @@ h1 {
 .send__status--error { color: var(--error); }
 .send__status--ok { color: var(--success); }
 .send__status--busy { color: var(--text-muted); }
+/* Same muted treatment as `busy`: both mean "in progress", and colouring them
+   differently would suggest the wait changes character when the work crosses
+   from our side of the wire to the server's. It does not — CCEXT-97. */
+.send__status--watching { color: var(--text-muted); }
 .send__link {
   display: inline-block; margin-top: 6px; font-size: 11px; color: var(--accent-500);
 }
@@ -545,6 +564,24 @@ h1 {
   border-color: var(--accent-500);
 }
 .wb__prefs { margin-top: 10px; }
+.wb__head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* CCEXT-87: icon-only, sized to content rather than stretched across the
+   panel. Theme is a set-once preference and was taking a full-width row on
+   every tab; three glyphs say the same thing in a corner. */
+.seg--compact { display: inline-flex; margin-bottom: 0; }
+.seg--compact .seg__btn { flex: 0 0 auto; padding: 4px 7px; gap: 0; }
+/* Hidden from the eye, not from the accessibility tree — the button keeps its
+   accessible name and gains a hover title. `clip-path` over `display:none`
+   for exactly that reason. */
+.seg--compact .seg__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
 
 /* Icons inherit their button's colour via stroke="currentColor", so they
    theme themselves across light/dark x six palettes with no second asset. */
@@ -701,6 +738,14 @@ h1 {
 .qc__action { flex: 0 0 auto; display: flex; align-items: center; color: var(--text-muted); }
 .qc__action .icon { width: 14px; height: 14px; }
 .qc__failed { font-size: 10px; color: var(--error); }
+/* CCEXT-86: a prose snippet goes to the answer desk, not the clipboard, so the
+   row says where. Accent rather than muted because it is the destination that
+   differs from every other row, and that is the part worth reading. */
+.qc__to { font-size: 10px; font-weight: 600; white-space: nowrap; color: var(--accent-500); }
+
+/* What the last press did. The desk is in another section, so this line is the
+   only confirmation visible from where the click happened. */
+.qc__note { margin: 6px 0 0; font-size: 11px; color: var(--text-muted); }
 
 .qc__open {
   flex: 0 0 auto;
@@ -761,6 +806,10 @@ h1 {
 .qc__chip .icon { width: 15px; height: 15px; }
 .qc__chip.is-copied { border-color: var(--success); color: var(--success); }
 .qc__chip.is-failed { border-color: var(--error); color: var(--error); }
+/* Landed on the desk. A distinct colour from is-copied on purpose: two
+   different things happen on this bar now, and a shared green would erase the
+   one distinction the user needs — which of them went where. */
+.qc__chip.is-added { border-color: var(--accent-500); color: var(--accent-500); }
 
 /* --- application card --------------------------------------------------- */
 .ac {
@@ -777,12 +826,16 @@ h1 {
   gap: 8px;
   margin-bottom: 6px;
 }
+/* CCEXT-89: identical to .tp__badge. Both name the same fact — this posting
+   is in the library — so both look the same. The accent-purple variant this
+   replaced made one post look like two different relationships depending on
+   which tab you were standing on. */
 .ac__badge {
   padding: 1px 6px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--accent-500);
-  border: 1px solid var(--accent-500);
+  color: var(--success);
+  border: 1px solid var(--success);
   border-radius: 3px;
 }
 .ac__score { font-size: 13px; font-weight: 700; color: var(--accent-500); }
@@ -812,7 +865,17 @@ h1 {
   cursor: pointer;
 }
 .ac__btn:hover { border-color: var(--accent-500); color: var(--accent-500); }
-.ac__status { margin: 8px 0 0; font-size: 11px; color: var(--text-muted); }
+/* A status, marked as one — it sits between two links and used to read as a
+   disabled third (CCEXT-89). The check earns it a shape of its own. */
+.ac__status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ac__status .icon { width: 12px; height: 12px; color: var(--success); }
 .ac__status.is-err { color: var(--error); }
 .ac__empty { margin: 12px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.5; }
 
@@ -973,3 +1036,384 @@ h1 {
 .dh__grid dt { color: var(--text-muted); }
 /* Wrap, never truncate — a URL's tail is the useful half. */
 .dh__grid dd { margin: 0; overflow-wrap: anywhere; }
+
+
+/* --- CCEXT-45 answer desk: frame ----------------------------------------- */
+.ad { margin-bottom: 12px; }
+.ad__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ad__head-actions { display: flex; align-items: center; gap: 8px; }
+.ad__busy {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-500);
+}
+.ad__scan {
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.ad__scan:hover { border-color: var(--accent-500); }
+.ad__scan:disabled { opacity: 0.6; cursor: default; }
+/* The desk's own status line — a stale golfer click, not a draft's note. */
+.ad__note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* --- the question picker: two views of one list --------------------------- */
+.qp { margin-bottom: 10px; }
+.qp__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.qp__label { font-size: 11px; color: var(--text-muted); }
+.qp__toggle {
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.qp__toggle:hover { border-color: var(--accent-500); color: var(--accent-500); }
+.qp__empty { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+
+/* The extension's first <select>. var() tokens only, so light/dark x 6
+   palettes come free — a literal colour here is the one thing that breaks it. */
+.qp__select {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+.qp__select:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+
+.qp__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.qp__row + .qp__row { border-top: 1px solid var(--divider); }
+.qp__pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.qp__pick:hover { background: var(--bg-soft); }
+.qp__pick.is-selected { background: var(--accent-50); }
+/* Fixed width so the question text sits on the same left edge whether or not
+   this row holds the flag — the selection must not shift the list. */
+.qp__flag { flex: 0 0 1.1em; font-size: 12px; line-height: 1.4; }
+.qp__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.qp__q { font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.qp__meta { font-size: 10px; color: var(--text-muted); }
+
+/* --- the answer editor ---------------------------------------------------- */
+.ae { margin-top: 10px; }
+.ae__q { margin: 0; font-size: 12px; font-weight: 600; line-height: 1.4; }
+.ae__how { margin: 2px 0 0; font-size: 10px; font-style: italic; color: var(--text-muted); }
+.ae__choice {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  background: var(--bg-soft);
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+}
+.ae__warn { margin: 6px 0 0; font-size: 10px; line-height: 1.4; color: var(--text-muted); }
+
+.ae__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+/* CCEXT-61. This paired `--accent-700` text with an `--accent-50` fill, which
+ * is handsome in light (indigo 7.07:1) and unreadable in dark in ALL SIX
+ * palettes — 2.02:1 indigo through 2.98:1 amber, against 4.5:1 for 11px text.
+ *
+ * The cause is structural, not a bad colour pick: the token layer overrides
+ * `--accent-50`/`--accent-100` per dark palette but leaves 500/600/700 alone,
+ * so ANY rule pairing a 600/700 foreground with a 50 background inverts in
+ * dark. The tint goes near-black; the hue does not move.
+ *
+ * So this stops pairing an accent hue with an accent tint at all, and uses the
+ * neutral surface `.tp`, `.lp` and `.qc__copy` already use — 17.06:1 light,
+ * 14.63:1 dark, and it cannot invert because neither token is per-palette.
+ * The accent stays for things that are ACTIONS; a chip is a label. */
+.ae__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+.ae__chip-text { overflow-wrap: anywhere; }
+.ae__chip-x {
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ae__chip-x:hover { color: var(--error); }
+
+.ae__input-label { display: block; margin: 10px 0 4px; font-size: 11px; color: var(--text-muted); }
+.ae__input {
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  resize: vertical;
+}
+.ae__input:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+
+.ae__actions { display: flex; gap: 6px; margin-top: 8px; }
+.ae__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ae__btn:hover { border-color: var(--accent-500); }
+.ae__btn:disabled { opacity: 0.6; cursor: default; }
+.ae__btn--go { font-weight: 600; }
+.ae__status { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+
+/* ===========================================================================
+ * SURFACE PASS — porting the popup's visual vocabulary (CCEXT-79)
+ *
+ * Doug, using the panel: "The text is verbose and it doesn't have any of the
+ * styles of the pop up." Diagnosed rather than assumed, and it is NOT a
+ * stylesheet-loading fault — the panel is styled, and the token block at the
+ * top of this file is the popup's own, verbatim. Three specific things were
+ * missing.
+ *
+ *   1. THE CARD. The popup was a stack of cards on `--bg-soft` — .tool-card,
+ *      .tracked-card, .quick-copy-card, .profile-card all shared one surface.
+ *      This rewrite ported that treatment to exactly ONE component (.tp) and
+ *      left the rest flat, so the panel reads as loose text between hairlines
+ *      where the popup read as furniture. The header comment above said the
+ *      component rules were "deliberately NOT carried over"; that decision is
+ *      what is being revisited here, not an oversight being corrected.
+ *
+ *   2. SKELETONS. .skel / .skel-heading / .skel-card / .skel-line had no
+ *      equivalent at all, so every async moment renders as bare text. That is
+ *      most of a first impression, and it is the single likeliest source of
+ *      "doesn't have any of the styles".
+ *
+ *   3. THE SPINNER. Same — no equivalent, so a busy button just sits there.
+ *
+ * ── THE CONSTRAINT THAT SHAPES THIS PASS ─────────────────────────────────
+ *
+ * Doug: "Pop up was designed with height constraints. Just be aware."
+ *
+ * So the popup's density is NOT the design intent — it is compression under
+ * 320x600. Porting its 10px paddings and 11px type wholesale would import a
+ * workaround as though it were a decision. The rule here is INHERIT THE
+ * DISCIPLINE, NOT THE CRAMPING: take the vocabulary (card, chip, skeleton,
+ * spinner) at spacing the panel can afford, and take the BREVITY OF COPY even
+ * though the panel no longer forces it — the 320px box is why the popup's
+ * writing was tight, and tight was better.
+ *
+ * Radius is 8px, not the popup's 6px: it matches .tp, which is the one card
+ * already here, and Tailwind's `rounded-lg` in the web app.
+ *
+ * FIRST PASS, DELIBERATELY CSS-ONLY. No .gts touched, so it is one revert if
+ * the designer disagrees. Per-component head padding and the copy edits are
+ * explicitly NOT done — those want the screenshot and the designer.
+ * ======================================================================= */
+
+/* The shared surface. Applied to top-level CONTENT blocks only: the staff and
+   diagnostic panels (.dh, .elog, .probe, .lp) stay flat deliberately, so the
+   card means "this is the work" rather than decorating everything.
+
+   .qp and .ae are absent on purpose — they live INSIDE .ad, and a card inside
+   a card on the same --bg-soft reads as a double border rather than depth. */
+.tp,
+.qc,
+.ac,
+.ma,
+.lo,
+.ad {
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* .tp already carried the card and set its own tighter box. Re-stating it
+   here rather than editing the original keeps this whole pass in one
+   revertible block. */
+.tp { margin-bottom: 12px; }
+
+/* .qc set only a margin — this is the .quick-copy-card treatment it lost. Its
+   head was a bordered strip in the popup; that is per-component tuning and is
+   left for the designer. */
+.qc { margin-bottom: 12px; }
+
+/* ── Restatements: borders that carry MEANING, not just an edge ───────────
+   The shared rule above is later in the sheet than these components and uses
+   the `border` SHORTHAND, so it silently flattened three signals. Caught in
+   architectural review; restated here rather than by reordering, so the whole
+   surface pass stays one revertible block.
+
+   .lo and .ma were --accent-500 on purpose: "An offer, never an adoption. The
+   accent border says 'this needs an answer' without the alarm of an error
+   colour." Reduced to the same hairline as every other card, a ladder offer
+   stopped asking for anything.
+
+   .lo--tentative is the worse half. It sets border-COLOR and border-STYLE as
+   longhands; a later shorthand resets both, so the dashed tentative offer
+   became pixel-identical to the confident one. `tentativeClass` still computed
+   it and the rule was still in the sheet — the T6 "we only know you were
+   looking at this" distinction was deleted while looking fully alive. */
+.lo,
+.ma {
+  border-color: var(--accent-500);
+}
+.lo--tentative {
+  border-color: var(--border-strong);
+  border-style: dashed;
+}
+
+/* Hover feedback that the card surface swallowed. `.qp__pick` has `border: 0`
+   and hovered to --bg-soft, which IS the card colour now — so the question
+   list, the panel's primary way of choosing anything, lost its only pointer
+   affordance entirely. --bg-input reads against the card in all twelve
+   theme x palette combinations.
+
+   The sibling controls that also sit --bg-soft-on---bg-soft (.qc__copy,
+   .qc__open, .ae__choice, .ae__chip) keep their borders so they do not
+   disappear, and are left for the designer — losing fill separation is a
+   judgement call, losing hover entirely is not. */
+.qp__pick:hover {
+  background: var(--bg-input);
+}
+
+/* ── Skeletons ────────────────────────────────────────────────────────────
+   Ported from the popup, which is the one place these existed. The shimmer
+   runs between --bg-soft and --border, so it themes across all twelve
+   theme x palette combinations without naming a colour. */
+.skel {
+  background: linear-gradient(
+    90deg,
+    var(--bg-soft) 0%,
+    var(--border) 50%,
+    var(--bg-soft) 100%
+  );
+  background-size: 200% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+.skel-heading { height: 12px; width: 40%; margin-bottom: 10px; }
+.skel-card { height: 64px; margin-bottom: 12px; border-radius: 8px; }
+.skel-line { height: 10px; margin-bottom: 8px; }
+.skel-line:last-child { width: 70%; margin-bottom: 0; }
+
+@keyframes skel-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Busy spinner ─────────────────────────────────────────────────────────
+   The popup hard-coded white, which was safe there because it only ever sat
+   on an accent-filled button. Kept to that context and expressed through
+   currentColor so it cannot go invisible if it is ever used elsewhere. */
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.75;
+  animation: cc-spin 0.7s linear infinite;
+  vertical-align: -2px;
+  margin-left: 8px;
+}
+
+@keyframes cc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Respect the user's motion preference. The popup predates this being routine
+   and shipped both animations unconditionally.
+
+   The two are treated DIFFERENTLY on purpose, and an earlier version of this
+   comment claimed both were "dropped", which was wrong. The shimmer is pure
+   decoration on a placeholder, so it stops outright. The spinner is the only
+   thing saying work is in progress — a frozen spinner reads as a hung app,
+   which is worse for the user this query is protecting — so it slows rather
+   than stopping. */
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; background: var(--bg-soft); }
+  .spinner { animation-duration: 2.4s; }
+}

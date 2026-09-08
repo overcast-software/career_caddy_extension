@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import DraftBox from './draft-box.gts';
+import AnswerDeskCard from './answer-desk.gts';
 import PermissionProbe from './permission-probe.gts';
 import ErrorLog from './error-log.gts';
 import DevHints from './dev-hints.gts';
@@ -18,17 +18,22 @@ import ApplicationCard from './application-card.gts';
 import LadderOffer from './ladder-offer.gts';
 import MatchAppCard from './match-app-card.gts';
 import AccessGate from './access-gate.gts';
-import type { SectionSpec } from './section.gts';
+import { visibleSections } from '../domain/sections.ts';
+import type { SectionSpec } from '../domain/sections.ts';
 import { layout } from '../state/layout.ts';
+import type { LayoutMode } from '../state/layout.ts';
 import { session } from '../state/session.ts';
 import { page } from '../state/page.ts';
 import { access } from '../state/access.ts';
 import { trackedPost } from '../state/tracked.ts';
 import { scoreRunner } from '../state/score.ts';
+import { application } from '../state/application.ts';
+import { worker } from '../state/worker.ts';
 import { linkPicker } from '../state/link-picker.ts';
 import { me } from '../state/me.ts';
 import { ladder } from '../state/ladder.ts';
 import { applyBackfill } from '../state/apply-backfill.ts';
+import { answerDesk } from '../state/answer-desk.ts';
 import { theme } from '../state/theme.ts';
 
 /**
@@ -54,7 +59,6 @@ declare const __BUILD__: string;
 
 export default class Workbench extends Component {
   @tracked uptime = 0;
-  @tracked draft = '';
 
   /**
    * `number | undefined` because the field genuinely has no value until the
@@ -80,9 +84,41 @@ export default class Workbench extends Component {
     void layout.load();
     void session.load();
     void me.load();
+    // The desk registers its OWN page.onChange reset (state/answer-desk.ts).
+    // This only picks up the drafts already on disk, so a panel reload lands
+    // on the answers it was in the middle of.
+    void answerDesk.load();
     page.start();
     // Re-evaluate access on every page change — a grant is per-origin, so
     // switching tabs can move between granted and ungranted sites.
+    // CCEXT-92: connecting re-asks everything a page change would.
+    // `trackedPost.refresh()` declines to call the server without a key, so
+    // before this the answer it settled on while logged out stayed frozen
+    // until the tab navigated — log in, and the panel still offered to send a
+    // page it already had.
+    //
+    // Registered on the SAME callback as navigation because the question is
+    // identical: something the answers derive from moved. Note this covers
+    // `session.load()` too, so a boot that restores a stored key no longer
+    // depends on winning a race against the constructor's own refresh.
+    session.onChange(() => this.reevaluate());
+
+    // The background worker finishing is a fourth caller of the same question
+    // (CCEXT-96). Before this the worker told the OS and nothing else, so with
+    // the tab sitting still the panel held "Parsing and scoring it." while the
+    // notification for the completed score was already on screen.
+    //
+    // `reevaluate()` rather than a targeted refresh, and deliberately: the
+    // announcement means "the api has something new to say about this page",
+    // which is the same thing navigation and connecting mean. Routing all four
+    // through one method is what stopped them drifting last time.
+    //
+    // No page-scoping needed HERE — `reevaluate()` re-derives from whatever
+    // page the panel is currently showing, so an announcement about a tab the
+    // user has left costs a redundant lookup and nothing else. The card that
+    // renders per-page prose does its own url check (send-card.gts).
+    worker.onAnnounce(() => this.reevaluate());
+
     page.onChange(() => {
       void access.refresh();
       // "Do we already know this page?" is asked on every navigation, not
@@ -103,11 +139,29 @@ export default class Workbench extends Component {
       linkPicker.disarm();
     });
     access.listen();
+    // Kept even though `session.onChange` and `page.onChange` both cover the
+    // usual boot: on a restricted page `page.refresh()` finds no URL, so
+    // `url === previousUrl === ''` and it returns WITHOUT notifying. Drop this
+    // and the access probe never runs there.
+    this.reevaluate();
+  }
+
+  /**
+   * Re-ask everything that depends on the key or the page.
+   *
+   * One method, three callers (boot, navigation, connect/disconnect), so the
+   * set cannot drift between them — which is exactly how connect ended up
+   * re-running nothing.
+   */
+  private reevaluate(): void {
     void access.refresh();
     void trackedPost.refresh().then(() => {
-        void ladder.run();
-        void applyBackfill.maybeBackfill();
-      });
+      void ladder.run();
+      void applyBackfill.maybeBackfill();
+    });
+    // Quick copy is key-gated too, and its card renders nothing when `/me`
+    // has no snippets — indistinguishable from "you have none" (CCEXT-86).
+    void me.load();
   }
 
   /** A panel is long-lived, not immortal. An interval outliving it is a leak. */
@@ -137,6 +191,31 @@ export default class Workbench extends Component {
 
   setTheme = (mode: string): void => theme.setMode(mode);
 
+  /**
+   * The layout A/B, now living in Diagnostics (CCEXT-87).
+   *
+   * It is not a preference — `state/layout.ts` says so: *"Rather than guess,
+   * this makes the choice a runtime toggle over the same components."* It is
+   * the instrument for deciding accordion-vs-tabs, which is CCEXT-80's job,
+   * and it was charging every tab a full-width row to stay reachable.
+   *
+   * NOTE the consequence, because it is a real one: Diagnostics is staff-only,
+   * so a non-staff user can no longer change layout and is pinned to the
+   * accordion default. That is acceptable ONLY because there is no installed
+   * base yet (CCEXT-49). It makes CCEXT-80 load-bearing rather than cosmetic —
+   * whichever layout wins there becomes everyone's, permanently.
+   */
+  layoutOptions = [
+    { value: 'accordion', label: 'Accordion', icon: 'rows' as const },
+    { value: 'tabs', label: 'Tabs', icon: 'columns' as const },
+  ];
+
+  setLayout = (mode: string): void => layout.setMode(mode as LayoutMode);
+
+  get layout(): typeof layout {
+    return layout;
+  }
+
   private get manifestVersion(): string {
     try {
       return chrome.runtime.getManifest().version;
@@ -145,9 +224,17 @@ export default class Workbench extends Component {
     }
   }
 
+  /**
+   * Minutes accumulated forever, so a panel left open overnight read
+   * "901m 40s" (CCEXT-90). Past an hour the seconds stop being information —
+   * nobody reads the units digit on a 15-hour counter — so they are dropped
+   * rather than carried into a third field nobody scans.
+   */
   get uptimeLabel(): string {
-    const m = Math.floor(this.uptime / 60);
+    const h = Math.floor(this.uptime / 3600);
+    const m = Math.floor((this.uptime % 3600) / 60);
     const s = this.uptime % 60;
+    if (h > 0) return `${h}h ${m}m`;
     return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
 
@@ -161,38 +248,88 @@ export default class Workbench extends Component {
    * without anything explicitly telling it to.
    */
   get sections(): SectionSpec[] {
-    return [
-      { id: 'page', title: 'This page', summary: this.host },
-      {
-        id: 'applications',
-        title: 'Applications',
-        summary: `${me.items.length} snippets`,
-      },
-      { id: 'answers', title: 'Answer desk', summary: `${this.draft.length} chars` },
-      { id: 'diagnostics', title: 'Diagnostics', summary: `up ${this.uptimeLabel}` },
-    ];
+    return visibleSections(
+      [
+        { id: 'page', title: 'This page', short: 'Page', summary: this.host },
+        {
+          id: 'applications',
+          title: 'Applications',
+          short: 'Apply',
+          // Was `${me.items.length} snippets` — a summary of the quick-copy
+          // card, which now lives under Answers (CCEXT-86). A section header
+          // describing a card in a different section is the kind of stale
+          // pointer nobody notices, so it moves with the card rather than
+          // being left to rot.
+          summary: this.applicationSummary,
+        },
+        {
+          id: 'answers',
+          title: 'Answer desk',
+          short: 'Answers',
+          summary: this.answerSummary,
+        },
+        {
+          id: 'diagnostics',
+          title: 'Diagnostics',
+          short: 'Debug',
+          summary: `up ${this.uptimeLabel}`,
+          staffOnly: true,
+        },
+      ],
+      me.isStaff,
+    );
   }
 
-  updateDraft = (next: string): void => {
-    this.draft = next;
-  };
+  /**
+   * What a COLLAPSED Applications section still tells you.
+   *
+   * Whether this page's posting is being tracked as an application — which is
+   * what the section is FOR, and is the one fact worth surfacing without
+   * opening it. Silent while idle: a section header should not assert
+   * "not tracked" about a page whose post has not been resolved yet, because
+   * that reads as an answer when it is only an absence.
+   */
+  private get applicationSummary(): string {
+    if (application.state === 'tracked') return 'tracked';
+    if (application.state === 'checking' || application.state === 'tracking') return 'checking…';
+    return '';
+  }
+
+  /**
+   * What a COLLAPSED answer desk still tells you.
+   *
+   * "2 generating" is the line that matters: several questions can be in
+   * flight at once, and a shut section that hid that would make the panel look
+   * idle while it was working.
+   */
+  private get answerSummary(): string {
+    const busy = answerDesk.generatingCount;
+    if (busy) return busy === 1 ? '1 generating' : `${busy} generating`;
+    const found = answerDesk.entries.length;
+    if (!found) return 'no questions found yet';
+    const answered = answerDesk.entries.filter((e) => !!e.draft?.content).length;
+    return `${answered}/${found} answered`;
+  }
 
   <template>
+    {{! CCEXT-87: theme rides in the header rather than owning a row under it.
+        Three glyphs, sized to content — the labels are still in the DOM for
+        screen readers, hidden only from the eye. }}
     <header class="wb__head">
-      <h1 class="wb__title">Career Caddy</h1>
+      <div class="wb__head-row">
+        <h1 class="wb__title">Career Caddy</h1>
+        <Segmented
+          @label="Theme"
+          @options={{this.themeOptions}}
+          @value={{this.theme.mode}}
+          @onSelect={{this.setTheme}}
+          @compact={{true}}
+        />
+      </div>
       <p class="wb__sub">Glimmer · side panel · <code class="wb__build">{{this.build}}</code></p>
     </header>
 
     <ConnectCard />
-
-    <div class="wb__prefs">
-      <Segmented
-        @label="Theme"
-        @options={{this.themeOptions}}
-        @value={{this.theme.mode}}
-        @onSelect={{this.setTheme}}
-      />
-    </div>
 
     <SectionSet @sections={{this.sections}} />
 
@@ -204,9 +341,6 @@ export default class Workbench extends Component {
       </Section>
 
       <Section @id="applications" @sections={{this.sections}}>
-        {{! Quick copy first and unconditional: it is useful on every page,
-            including the application form itself, where no post is matched. }}
-        <QuickCopyCard />
         {{! The offer sits ABOVE the card it would populate — accepting it is
             what turns "no post linked" into a trackable application. }}
         <LadderOffer />
@@ -214,19 +348,29 @@ export default class Workbench extends Component {
         <MatchAppCard />
       </Section>
 
+      {{! CCEXT-90: the hint that used to sit here explained the panel's
+          persistence to the people who built it. It shipped to every user and
+          would have been read by a store reviewer. A claim about the
+          architecture belongs in the listing copy, not in the workspace. }}
       <Section @id="answers" @sections={{this.sections}}>
-        <DraftBox
-          @label="Draft answer"
-          @value={{this.draft}}
-          @onInput={{this.updateDraft}}
-        />
-        <p class="wb__hint">
-          Click into the page, type in a form, switch tabs — then look back.
-          The draft is still here and the timer never restarted.
-        </p>
+        {{! Quick copy belongs to the desk, not to Applications (CCEXT-86).
+            A saved snippet IS an instruction, and pressing one pushes a chip
+            onto the SELECTED question — so it sits ABOVE the desk, in the
+            causal order: pick the directive, then the question it applies to.
+            Its old home under Applications predated this section existing. }}
+        <QuickCopyCard />
+        <AnswerDeskCard />
       </Section>
 
       <Section @id="diagnostics" @sections={{this.sections}}>
+        <div class="wb__prefs">
+          <Segmented
+            @label="Layout"
+            @options={{this.layoutOptions}}
+            @value={{this.layout.mode}}
+            @onSelect={{this.setLayout}}
+          />
+        </div>
         <p class="wb__uptime">
           Panel alive for <strong>{{this.uptimeLabel}}</strong>
         </p>

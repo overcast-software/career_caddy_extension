@@ -144,3 +144,39 @@ export function previewOf(value: string, max = 72): string {
   const flat = value.replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : flat.slice(0, max - 1) + '…';
 }
+
+/** What pressing a snippet does. */
+export type SnippetAction = 'inject' | 'copy';
+
+/**
+ * Press a snippet — does it go to the answer desk, or to the clipboard?
+ * (CCEXT-86)
+ *
+ * Doug: *"I'd rather it put it in there explicitly but I'm willing to settle
+ * for the extra copy and paste if two quick fields is confusing."* It does not
+ * have to be confusing, because there is no second field to add: a saved prompt
+ * IS an instruction, and the desk already keeps an accumulating, removable
+ * instruction stack per question. So the snippet becomes a chip on that stack,
+ * and the one existing input stays exactly what it was.
+ *
+ * Two things send it to the clipboard instead, and neither is a fallback for
+ * failure:
+ *
+ *   1. **It is a link.** A LinkedIn profile is not a directive to a model —
+ *      injecting one would put a bare URL under a heading that calls it a
+ *      PRIORITY instruction. This is `isLinkLike` doing the exact job its
+ *      docblock describes, choosing an affordance; nothing is hidden or
+ *      rejected, so it is still not a filter.
+ *   2. **No question is selected.** Instruction stacks are per-question
+ *      (`AnswerDraft.instructions`) — with nothing selected there is no stack
+ *      to push onto. Copying is the honest thing to do, provided the card SAYS
+ *      that is what happened; silently doing nothing is the failure mode this
+ *      whole card already had a `failed` state for.
+ *
+ * Pure, so the rule is testable without a page, a panel or a desk.
+ */
+export function actionFor(value: string, hasSelectedQuestion: boolean): SnippetAction {
+  if (!value.trim()) return 'copy';
+  if (isLinkLike(value)) return 'copy';
+  return hasSelectedQuestion ? 'inject' : 'copy';
+}
