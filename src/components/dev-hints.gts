@@ -7,6 +7,8 @@ import type { PageHints } from '../state/hints.ts';
 import { lastSelectorFetch } from '../data/selectors.ts';
 import { requestSharpen } from '../data/sharpen.ts';
 import { profileLookupNote } from '../domain/profile-note.ts';
+import { fieldRows, summarise } from '../domain/proposed-post.ts';
+import type { FieldRow } from '../domain/proposed-post.ts';
 import { me } from '../state/me.ts';
 import { page } from '../state/page.ts';
 import { session } from '../state/session.ts';
@@ -46,6 +48,26 @@ export default class DevHints extends Component {
 
   get isStaff(): boolean {
     return me.isStaff;
+  }
+
+  /**
+   * The per-field validator — `renderProposedPost`'s reason for existing.
+   *
+   * Empty until `read()` runs, because the outcome is a fact about a page
+   * that was actually read. Rendering an all-absent table before then would
+   * read as "this host configures nothing", which is a different claim.
+   */
+  get rows(): FieldRow[] {
+    if (!this.hints) return [];
+    return fieldRows(this.hints.fields, this.hints.structuredPrefill);
+  }
+
+  get summary(): string {
+    return this.rows.length ? summarise(this.rows) : '';
+  }
+
+  get reasons(): string[] {
+    return this.hints?.reasons ?? [];
   }
 
   read = (): void => {
@@ -129,6 +151,26 @@ export default class DevHints extends Component {
             <dt>profile</dt><dd>{{orNone this.hints.profileId}}</dd>
           </dl>
 
+          {{#if this.reasons}}
+            <p class="dh__note">Why not known-good:</p>
+            <ul class="dh__reasons">
+              {{#each this.reasons as |reason|}}
+                <li>{{reason}}</li>
+              {{/each}}
+            </ul>
+          {{/if}}
+
+          <p class="dh__summary-line">{{this.summary}}</p>
+          <dl class="dh__fields">
+            {{#each this.rows as |row|}}
+              <dt class="dh__mark {{markClass row.verdict}}">{{mark row.verdict}}</dt>
+              <dd class="dh__field">
+                <span class="dh__field-key">{{row.field}}</span>
+                <span class="dh__field-val">{{verdictText row}}</span>
+              </dd>
+            {{/each}}
+          </dl>
+
           {{#if this.hints.profileId}}
             <button
               type="button"
@@ -161,4 +203,31 @@ function fieldList(prefill: Record<string, string>): string {
 
 function readiness(knownGood: boolean, tier: string | null): string {
   return `${knownGood ? 'known-good' : 'not known-good'} · tier ${tier ?? '—'}`;
+}
+
+function mark(verdict: FieldRow['verdict']): string {
+  if (verdict === 'matched') return '✓';
+  if (verdict === 'absent') return '—';
+  return '✗';
+}
+
+function markClass(verdict: FieldRow['verdict']): string {
+  return `is-${verdict}`;
+}
+
+/**
+ * The wording is the payload. Each line names the fix, because "no value" is
+ * the one answer that tells a staff user nothing about what to do next.
+ */
+function verdictText(row: FieldRow): string {
+  switch (row.verdict) {
+    case 'matched':
+      return row.value ?? '';
+    case 'missed':
+      return 'no match on this page — stale selector';
+    case 'invalid':
+      return 'invalid selector — not valid CSS, it never ran';
+    case 'absent':
+      return 'not configured';
+  }
 }

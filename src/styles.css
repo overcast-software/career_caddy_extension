@@ -1037,6 +1037,22 @@ h1 {
 /* Wrap, never truncate — a URL's tail is the useful half. */
 .dh__grid dd { margin: 0; overflow-wrap: anywhere; }
 
+/* --- CCEXT-49 selector validator ----------------------------------------- */
+.dh__reasons { margin: 4px 0 0; padding-left: 18px; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+.dh__summary-line { margin: 10px 0 0; font-size: 11px; font-weight: 600; color: var(--text); }
+.dh__fields { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 4px 0 0; font-size: 11px; }
+.dh__mark { text-align: center; }
+/* Three outcomes, three colours. `absent` stays muted because "nobody
+   configured this" is not a failure of the page — it is a gap in the profile,
+   and colouring it red would put every host permanently in the red. */
+.dh__mark.is-matched { color: var(--success); }
+.dh__mark.is-missed { color: var(--error); }
+.dh__mark.is-invalid { color: var(--error); }
+.dh__mark.is-absent { color: var(--text-muted); }
+.dh__field { display: flex; gap: 8px; margin: 0; min-width: 0; }
+.dh__field-key { flex: 0 0 auto; color: var(--text-muted); }
+.dh__field-val { flex: 1 1 auto; overflow-wrap: anywhere; }
+
 
 /* --- CCEXT-45 answer desk: frame ----------------------------------------- */
 .ad { margin-bottom: 12px; }
